@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codestr"
+version = "0.1.0"
+description = "DSL → Polars Expr compile engine for quantitative factor mining"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "huangbogeng"},
+]
+keywords = ["quantitative-finance", "factor-mining", "expression-engine", "polars", "dsl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "polars>=1.0",
+    "lark>=1.0",
+    "loguru>=0.7",
+    "toolz>=1.0",
+    "numpy>=1.26",
+]
+
+[project.urls]
+Repository = "https://github.com/huangbogeng/codestr"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codestr"]
