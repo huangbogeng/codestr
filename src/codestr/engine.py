@@ -1,15 +1,23 @@
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
+import polars as pl
 from loguru import logger
 
-import polars as pl
-
 from codestr.compiler import compile as _pure_compile
-from codestr.errors import CalculateError, CompileError, PolarsError, FailError
-from codestr.syntax import Call, depth as _depth, node_count as _node_count, to_rpn as _to_rpn
+from codestr.errors import CompileError, FailError, PolarsError
 from codestr.parser import parse as _parse
+from codestr.syntax import (
+    Call,
+)
+from codestr.syntax import (
+    depth as _depth,
+)
+from codestr.syntax import (
+    node_count as _node_count,
+)
+from codestr.syntax import (
+    to_rpn as _to_rpn,
+)
 from codestr.udf.registry import UDFRegistry
 
 
@@ -60,15 +68,11 @@ class CodeStr:
 
     def align(self, on=("datetime", "asset")):
         """数据对齐"""
-        lev_vals: list[pl.DataFrame] = [
-            self.data.select(name).drop_nulls().unique() for name in on
-        ]
+        lev_vals: list[pl.DataFrame] = [self.data.select(name).drop_nulls().unique() for name in on]
         full_index = lev_vals[0].unique()
         for lev_val in lev_vals[1:]:
             full_index = full_index.join(lev_val.unique(), how="cross")
-        self.data = full_index.join(self.data, on=on, how="left").sort(
-            self.index
-        )
+        self.data = full_index.join(self.data, on=on, how="left").sort(self.index)
 
         self.dims = [self.data[name].drop_nulls().n_unique() for name in on]
 
@@ -91,11 +95,13 @@ class CodeStr:
         """Register a user-defined function into the UDF registry."""
         from codestr.udf.registry import UDFMeta, UDFRegistry
 
-        UDFRegistry.get_instance().register(UDFMeta(
-            name=name if name is not None else func.__name__,
-            fn=func,
-            category="user",
-        ))
+        UDFRegistry.get_instance().register(
+            UDFMeta(
+                name=name if name is not None else func.__name__,
+                fn=func,
+                category="user",
+            )
+        )
 
     def check_expr(
         self,
@@ -138,7 +144,13 @@ class CodeStr:
 
         stack = 0
         for token in rpn:
-            if token.type in (TokenType.FEATURE, TokenType.CONSTANT, TokenType.WINDOW, TokenType.BINS, TokenType.PARAM):
+            if token.type in (
+                TokenType.FEATURE,
+                TokenType.CONSTANT,
+                TokenType.WINDOW,
+                TokenType.BINS,
+                TokenType.PARAM,
+            ):
                 stack += 1
             elif token.type == TokenType.OPERATOR:
                 args_num = token.arity
@@ -156,7 +168,11 @@ class CodeStr:
         """
         try:
             node = _parse(expr)
-            return _pure_compile(node, registry=UDFRegistry.get_instance(), dims=getattr(self, "dims", None))
+            return _pure_compile(
+                node,
+                registry=UDFRegistry.get_instance(),
+                dims=getattr(self, "dims", None),
+            )
         except Exception as e:
             raise CompileError(f"Pure compilation failed for {expr}: {e}") from e
 
@@ -181,7 +197,11 @@ class CodeStr:
                 self._data_ = self._data_.with_columns(expr_pl)
                 return pl.col(alias), alias
 
-            expr_pl = _pure_compile(node, registry=UDFRegistry.get_instance(), dims=getattr(self, "dims", None))
+            expr_pl = _pure_compile(
+                node,
+                registry=UDFRegistry.get_instance(),
+                dims=getattr(self, "dims", None),
+            )
             self._data_ = self._data_.with_columns(expr_pl.alias(alias))
             self._cur_expr_cache[node] = alias
             return pl.col(alias), alias
@@ -202,7 +222,8 @@ class CodeStr:
         exprs: str
             表达式，比如 "ts_mean(close, 5) as close_ma5"
         cover: bool
-            当遇到已经存在列名的时候，是否重新计算覆盖原来的列, 默认False，返回已经存在的列，跳过计算
+            当遇到已经存在列名的时候，是否重新计算覆盖原来的列.
+            默认False，返回已经存在的列，跳过计算
             - True: 重新计算并且返回新的结果，覆盖掉原来的列
             - False, 返回已经存在的列，跳过计算
         lazy: bool
@@ -227,11 +248,7 @@ class CodeStr:
             else:
                 self.data = self.data.with_columns(
                     self._last_query_cache.select(
-                        *[
-                            i
-                            for i in self._last_query_cache.columns
-                            if i not in self.data.columns
-                        ]
+                        *[i for i in self._last_query_cache.columns if i not in self.data.columns]
                     )
                 )
 
@@ -244,9 +261,7 @@ class CodeStr:
             except Exception as e:
                 self.failed.append(FailError(expr, e))
         if self.failed:
-            logger.warning(
-                f"CodeStr.sql 失败：{len(self.failed)}/{len(exprs)}: \n {self.failed}"
-            )
+            logger.warning(f"CodeStr.sql 失败：{len(self.failed)}/{len(exprs)}: \n {self.failed}")
         if self._data_ is None:
             self._data_ = self.data.lazy()
         self._data_ = self._data_.with_columns(*exprs_to_add)
@@ -254,15 +269,13 @@ class CodeStr:
         if lazy:
             self._expr_cache.update(self._cur_expr_cache)
             result = self._data_.select(*self.index, *exprs_select)
-            self._data_ = _data_saved   # roll back: don't accumulate in lazy mode
+            self._data_ = _data_saved  # roll back: don't accumulate in lazy mode
             return result
 
         current_cols = set(self._data_.collect_schema().names())
         new_expr_cache = dict()
         try:
-            self._last_query_cache = self._data_.select(
-                *self.index, *exprs_select
-            ).collect()
+            self._last_query_cache = self._data_.select(*self.index, *exprs_select).collect()
             self._expr_cache.update(self._cur_expr_cache)
             for k, v in self._expr_cache.items():
                 if v in current_cols:
@@ -275,7 +288,7 @@ class CodeStr:
                 if v in current_cols:
                     new_expr_cache[k] = v
             self._expr_cache = new_expr_cache
-            self._data_ = _data_saved   # roll back failed with_columns
+            self._data_ = _data_saved  # roll back failed with_columns
             raise PolarsError(message=f"LazyFrame.collect() 阶段出错\n{e}") from e
 
     def clear_cache(self):

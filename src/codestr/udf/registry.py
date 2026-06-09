@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 
 @dataclass
@@ -62,6 +62,7 @@ def udf(
     arity: int | None = None,
 ) -> Callable:
     """@udf or @udf(category="ts", arity=2)"""
+
     def _decorator(f: Callable) -> Callable:
         meta = UDFMeta(
             name=name if name is not None else f.__name__,

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from codestr.tokens import Token, TokenType
 
-
 # ---- Base class -----------------------------------------------------------
+
 
 class ExprNode(ABC):
     """Abstract base for all AST nodes."""
@@ -18,15 +18,14 @@ class ExprNode(ABC):
         ...
 
     @abstractmethod
-    def __hash__(self) -> int:
-        ...
+    def __hash__(self) -> int: ...
 
     @abstractmethod
-    def __eq__(self, other: object) -> bool:
-        ...
+    def __eq__(self, other: object) -> bool: ...
 
 
 # ---- Leaf nodes -----------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class Column(ExprNode):
@@ -76,11 +75,21 @@ class Literal(ExprNode):
 
 _unary_map = {"neg": "-", "not_": "!"}
 _binary_map = {
-    "add": "+", "mul": "*", "div": "/", "sub": "-",
-    "floordiv": "//", "mod": "%", "pow": "**",
-    "and_": "&", "or_": "|",
-    "gt": ">", "ge": ">=", "lt": "<", "le": "<=",
-    "eq": "==", "neq": "!=",
+    "add": "+",
+    "mul": "*",
+    "div": "/",
+    "sub": "-",
+    "floordiv": "//",
+    "mod": "%",
+    "pow": "**",
+    "and_": "&",
+    "or_": "|",
+    "gt": ">",
+    "ge": ">=",
+    "lt": "<",
+    "le": "<=",
+    "eq": "==",
+    "neq": "!=",
 }
 
 
@@ -101,7 +110,7 @@ class Call(ExprNode):
 
     fn_name: str
     args: tuple[ExprNode, ...] = ()
-    _alias: str = ""          # cached rendering; set via __post_init__
+    _alias: str = ""  # cached rendering; set via __post_init__
 
     def __post_init__(self) -> None:
         if not self._alias:
@@ -125,6 +134,7 @@ class Call(ExprNode):
 
 
 # ---- Analysis helpers -----------------------------------------------------
+
 
 def depth(node: ExprNode) -> int:
     """Max nesting depth.  Leaf nodes = 1."""
@@ -158,24 +168,30 @@ def to_rpn(node: ExprNode) -> list[Token]:
         if isinstance(n, Call):
             for arg in n.args:
                 traverse(arg)
-            rpn.append(Token(
-                type=TokenType.OPERATOR,
-                name=n.fn_name,
-                arity=len(n.args),
-                value=n.fn_name,
-            ))
+            rpn.append(
+                Token(
+                    type=TokenType.OPERATOR,
+                    name=n.fn_name,
+                    arity=len(n.args),
+                    value=n.fn_name,
+                )
+            )
         elif isinstance(n, Column):
-            rpn.append(Token(
-                type=TokenType.FEATURE,
-                name=n.name,
-                value=n.name,
-            ))
+            rpn.append(
+                Token(
+                    type=TokenType.FEATURE,
+                    name=n.name,
+                    value=n.name,
+                )
+            )
         elif isinstance(n, Literal):
-            rpn.append(Token(
-                type=TokenType.CONSTANT,
-                name=str(n.value),
-                value=n.value,
-            ))
+            rpn.append(
+                Token(
+                    type=TokenType.CONSTANT,
+                    name=str(n.value),
+                    value=n.value,
+                )
+            )
 
     traverse(node)
     return rpn
@@ -196,6 +212,7 @@ def descendants(node: ExprNode) -> list[tuple[str, int]]:
 def common_subexprs(node: ExprNode) -> dict[tuple[str, int], int]:
     """Count occurrences of each sub-expression.  Key is (expr_string, depth)."""
     from collections import Counter
+
     return dict(Counter(descendants(node)))
 
 
@@ -206,7 +223,5 @@ def pre_cal_items(node: ExprNode, filter_value: int = 3, least_depth: int = 3) -
     least *filter_value* times.
     """
     return [
-        k[0]
-        for k, v in common_subexprs(node).items()
-        if v >= filter_value and k[1] >= least_depth
+        k[0] for k, v in common_subexprs(node).items() if v >= filter_value and k[1] >= least_depth
     ]

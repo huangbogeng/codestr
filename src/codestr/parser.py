@@ -4,9 +4,8 @@ import re
 
 from lark import Lark, Transformer, v_args
 
-from codestr.syntax import Call, Column, ExprNode, Literal
 from codestr.errors import ParseError
-
+from codestr.syntax import Call, Column, ExprNode, Literal
 
 _GRAMMAR = r"""
     start: expr
@@ -63,13 +62,13 @@ class ExprBuilder(Transformer):
 
     # ---- leaf tokens -------------------------------------------------------
 
-    def NAME(self, name) -> Column:
+    def NAME(self, name) -> Column:  # noqa: N802
         return Column(str(name))
 
-    def NUMBER(self, number) -> Literal:
+    def NUMBER(self, number) -> Literal:  # noqa: N802
         return Literal(int(number))
 
-    def FLOAT(self, number) -> Literal:
+    def FLOAT(self, number) -> Literal:  # noqa: N802
         return Literal(float(number))
 
     # ---- attribute access --------------------------------------------------
@@ -100,6 +99,7 @@ class ExprBuilder(Transformer):
     def _make_bin(fn_name: str):
         def method(self, items):
             return Call(fn_name=fn_name, args=tuple(items))
+
         return method
 
     # ---- unary --------------------------------------------------------------
@@ -126,8 +126,23 @@ class ExprBuilder(Transformer):
 
 
 # Generate binary-operator transformer methods
-for _op in ("add", "sub", "mul", "div", "floordiv", "mod", "pow",
-            "and_", "or_", "eq", "neq", "lt", "gt", "le", "ge"):
+for _op in (
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "floordiv",
+    "mod",
+    "pow",
+    "and_",
+    "or_",
+    "eq",
+    "neq",
+    "lt",
+    "gt",
+    "le",
+    "ge",
+):
     setattr(ExprBuilder, _op, ExprBuilder._make_bin(_op))
 setattr(ExprBuilder, "implicit_mul", ExprBuilder._make_bin("mul"))
 
@@ -143,8 +158,14 @@ def _get_parser() -> Lark:
 
 
 def _normalize(expr: str) -> str:
-    for old, new in {"if(": "if_(", "not(": "not_(", "and(": "and_(", "or(": "or_(",
-                     "$": "", "\n": ""}.items():
+    for old, new in {
+        "if(": "if_(",
+        "not(": "not_(",
+        "and(": "and_(",
+        "or(": "or_(",
+        "$": "",
+        "\n": "",
+    }.items():
         expr = expr.replace(old, new)
     # Convert standalone ! (logical not) to ~, but preserve != (not-equal)
     expr = re.sub(r"(?<!!)!(?!=)", "~", expr)

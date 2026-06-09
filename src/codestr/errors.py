@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
-
 from dataclasses import dataclass
 
 
 @dataclass
 class ParseError(Exception):
     """解析错误"""
+
     message: str
 
     def __str__(self):
@@ -18,6 +17,7 @@ class ParseError(Exception):
 @dataclass
 class CalculateError(Exception):
     """计算错误"""
+
     message: str
 
     def __str__(self):
@@ -30,6 +30,7 @@ class CalculateError(Exception):
 @dataclass
 class CompileError(Exception):
     """编译错误"""
+
     message: str
 
     def __str__(self):
@@ -42,6 +43,7 @@ class CompileError(Exception):
 @dataclass
 class PolarsError(Exception):
     """Polars 引擎错误"""
+
     message: str
 
     def __str__(self):
@@ -54,6 +56,7 @@ class PolarsError(Exception):
 @dataclass
 class FailError:
     """失败错误信息容器"""
+
     expr: str
     error: Exception
 

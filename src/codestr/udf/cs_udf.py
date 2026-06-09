@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 截面算子
 """
@@ -11,7 +9,9 @@ from codestr.udf.registry import udf
 over = dict(partition_by=["datetime"], order_by=["asset"])
 
 
-def configure_over(*, partition_by: list[str] | None = None, order_by: list[str] | None = None) -> None:
+def configure_over(
+    *, partition_by: list[str] | None = None, order_by: list[str] | None = None
+) -> None:
     """Update the default OVER window for all CS (cross-section) operators."""
     if partition_by is not None:
         over["partition_by"] = list(partition_by)
@@ -50,8 +50,12 @@ def cs_moderate(expr: pl.Expr):
 
 
 @udf(category="cs")
-def cs_qcut(expr: pl.Expr, N=10):
-    return expr.qcut(N, labels=[str(i) for i in range(1, N + 1)], allow_duplicates=True).over(**over).cast(pl.Int32)
+def cs_qcut(expr: pl.Expr, n_bins=10):
+    return (
+        expr.qcut(n_bins, labels=[str(i) for i in range(1, n_bins + 1)], allow_duplicates=True)
+        .over(**over)
+        .cast(pl.Int32)
+    )
 
 
 @udf(category="cs")

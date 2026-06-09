@@ -4,8 +4,8 @@ import inspect
 
 import polars as pl
 
-from codestr.syntax import Call, Column, ExprNode, Literal
 from codestr.errors import CompileError
+from codestr.syntax import Call, Column, ExprNode, Literal
 from codestr.udf.registry import UDFRegistry
 
 
@@ -20,7 +20,9 @@ def compile(
     return _compile(node, registry, dims).alias(node.alias)
 
 
-def _resolve(node: ExprNode, registry: UDFRegistry, dims: list[int] | None) -> pl.Expr | int | float | str:
+def _resolve(
+    node: ExprNode, registry: UDFRegistry, dims: list[int] | None
+) -> pl.Expr | int | float | str:
     """Compile an AST node to a Polars expression or resolve to a Python scalar."""
     if isinstance(node, Column):
         return pl.col(node.name)

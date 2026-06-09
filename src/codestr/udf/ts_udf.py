@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 时间序列算子 (Time Series Operators)
 """
@@ -10,7 +9,9 @@ from codestr.udf.registry import udf
 over = dict(partition_by=["asset"], order_by=["datetime"])
 
 
-def configure_over(*, partition_by: list[str] | None = None, order_by: list[str] | None = None) -> None:
+def configure_over(
+    *, partition_by: list[str] | None = None, order_by: list[str] | None = None
+) -> None:
     """Update the default OVER window for all TS (time-series) operators."""
     if partition_by is not None:
         over["partition_by"] = list(partition_by)
