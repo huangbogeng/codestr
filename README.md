@@ -1,6 +1,11 @@
 # CodeStr Engine
 
-CodeStr 是一个专为量化因子挖掘设计的表达式计算引擎，基于 Polars 构建，提供 DSL → Polars Expr 的高效转译与执行。
+[![CI](https://github.com/huangbogeng/codestr/actions/workflows/ci.yml/badge.svg)](https://github.com/huangbogeng/codestr/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+CodeStr 是一个专为量化因子挖掘设计的表达式计算引擎，基于 [Polars](https://pola.rs/) 构建，提供 DSL → Polars Expr 的高效转译与执行。
 
 ## 核心模式
 
@@ -51,6 +56,8 @@ expr = cs.compile("ts_mean(close, 5)")
 ## 目录结构
 
 - engine.py：引擎入口
-- expr.py：表达式解析与 AST 构建
+- syntax.py：AST 定义
+- compiler.py：AST → Polars Expr 编译器
+- parser.py：DSL 解析器 (Lark grammar)
 - tokens.py：Token 定义
 - udf/：算子实现（ts/cs/base）
