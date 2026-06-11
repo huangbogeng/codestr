@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from codestr.compiler import compile as _pure_compile
 from codestr.errors import CompileError, FailError, PolarsError
@@ -40,10 +45,34 @@ class CodeStr:
     def __init__(
         self,
         data: pl.LazyFrame | pl.DataFrame,
-        index: tuple[str] = ("date", "time", "datetime", "asset"),
+        index: tuple[str, str] = ("datetime", "asset"),
+        partition_by: list[str] | None = None,
+        order_by: list[str] | None = None,
         align: bool = True,
         pure_lazy: bool = False,
     ):
+        """Initialize the CodeStr engine.
+
+        Args:
+            data: Input Polars DataFrame or LazyFrame.
+            index: A 2-tuple ``(time_col, entity_col)`` used for panel alignment
+                   and result column selection.
+            partition_by: Entity-axis columns for window grouping.
+                          Defaults to ``[index[1]]`` (e.g. ``["asset"]``).
+            order_by: Time-axis columns for window ordering.
+                      Defaults to ``[index[0]]`` (e.g. ``["datetime"]``).
+            align: If True (default), perform cross-join alignment to fill
+                   missing index combinations with nulls.
+            pure_lazy: If True, never materialize data — keep everything as
+                       LazyFrame. ``sql()`` calls will not update ``self.data``.
+
+        Window Semantics
+        ----------------
+        * **TS (time-series)** — ``over(partition_by=partition_by, order_by=order_by)``.
+          Each entity's rolling window runs independently along the time axis.
+        * **CS (cross-section)** — ``over(partition_by=order_by, order_by=partition_by)``.
+          At each time slice, operators compute across all entities.
+        """
         assert isinstance(data, (pl.LazyFrame, pl.DataFrame)), (
             "data 必须是 polars DataFrame 或 LazyFrame"
         )
@@ -52,9 +81,22 @@ class CodeStr:
         self._cur_expr_cache: dict = {}
 
         self.data: pl.DataFrame | None = None
-        self.index = index
+        self.index: tuple[str, str] = index
         self._data_: pl.LazyFrame | None = None
         self._last_query_cache: pl.DataFrame | None = None
+
+        # Over-window config: user provides partition / order columns explicitly
+        _partition = partition_by if partition_by is not None else [self.index[1]]
+        _order = order_by if order_by is not None else [self.index[0]]
+
+        self._ts_over = {
+            "partition_by": _partition,  # entity columns
+            "order_by": _order,  # time columns
+        }
+        self._cs_over = {
+            "partition_by": _order,  # time columns  (swapped)
+            "order_by": _partition,  # entity columns (swapped)
+        }
 
         if pure_lazy:
             self._data_ = data
@@ -66,8 +108,14 @@ class CodeStr:
             if align:
                 self.align()
 
-    def align(self, on=("datetime", "asset")):
-        """数据对齐"""
+    def align(self, on=None):
+        """数据对齐
+
+        Args:
+            on: 2-tuple of columns to align on.  Defaults to ``self.index``.
+        """
+        if on is None:
+            on = (self.index[0], self.index[1])
         lev_vals: list[pl.DataFrame] = [self.data.select(name).drop_nulls().unique() for name in on]
         full_index = lev_vals[0].unique()
         for lev_val in lev_vals[1:]:
@@ -91,7 +139,7 @@ class CodeStr:
     def __repr__(self):
         return str(self.data)
 
-    def register_udf(self, func: callable, name: str = None):
+    def register_udf(self, func: Callable, name: str | None = None):
         """Register a user-defined function into the UDF registry."""
         from codestr.udf.registry import UDFMeta, UDFRegistry
 
@@ -111,6 +159,21 @@ class CodeStr:
         check_rpn: bool = True,
         check_redundant: bool = True,
     ):
+        """Validate an expression string before execution.
+
+        Does NOT execute the expression — only parses and runs structural checks.
+
+        Args:
+            expr: The DSL expression string to validate.
+            max_depth: If set, reject expressions exceeding this AST depth.
+            max_nodes: If set, reject expressions exceeding this node count.
+            check_rpn: Validate reverse Polish notation stack balance.
+            check_redundant: Detect redundant sub-expressions (e.g. ``a - a``).
+
+        Returns:
+            A dict with keys ``valid`` (bool), ``reasons`` (list[str]), and
+            ``expr`` (str representation of the parsed node, or None on error).
+        """
         result = {"valid": True, "reasons": [], "expr": None}
         try:
             node = _parse(expr)
@@ -162,9 +225,10 @@ class CodeStr:
             reasons.append("rpn_invalid")
 
     def compile(self, expr: str) -> pl.Expr:
-        """
-        Purely compile an expression string to a Polars Expression without side effects.
-        Used for batch evaluation.
+        """Purely compile an expression string to a Polars Expression.
+
+        No side effects.  The returned expression is bound to the column names
+        and over-window config of this CodeStr instance.
         """
         try:
             node = _parse(expr)
@@ -172,6 +236,8 @@ class CodeStr:
                 node,
                 registry=UDFRegistry.get_instance(),
                 dims=getattr(self, "dims", None),
+                ts_over=self._ts_over,
+                cs_over=self._cs_over,
             )
         except Exception as e:
             raise CompileError(f"Pure compilation failed for {expr}: {e}") from e
@@ -201,6 +267,8 @@ class CodeStr:
                 node,
                 registry=UDFRegistry.get_instance(),
                 dims=getattr(self, "dims", None),
+                ts_over=self._ts_over,
+                cs_over=self._cs_over,
             )
             self._data_ = self._data_.with_columns(expr_pl.alias(alias))
             self._cur_expr_cache[node] = alias
@@ -215,24 +283,21 @@ class CodeStr:
         cover: bool = False,
         lazy: bool = False,
     ) -> pl.LazyFrame | pl.DataFrame:
-        """
-        表达式查询
-        Parameters
-        ----------
-        exprs: str
-            表达式，比如 "ts_mean(close, 5) as close_ma5"
-        cover: bool
-            当遇到已经存在列名的时候，是否重新计算覆盖原来的列.
-            默认False，返回已经存在的列，跳过计算
-            - True: 重新计算并且返回新的结果，覆盖掉原来的列
-            - False, 返回已经存在的列，跳过计算
-        lazy: bool
-            是否返回 LazyFrame, 默认 False (返回 DataFrame)
-            - True: 返回 polars.LazyFrame，不进行计算 (collect)
-            - False: 返回 polars.DataFrame，立即计算
-        Returns
-        -------
-            polars.DataFrame | polars.LazyFrame
+        """Execute one or more DSL expressions interactively.
+
+        This is the **stateful** API — results are cached in the engine and
+        may be reused across subsequent ``sql()`` calls.
+
+        Args:
+            exprs: DSL expression strings, e.g. ``"ts_mean(close, 5) as ma5"``.
+            cover: If True, recompute even if the alias already exists.
+                   If False (default), skip computation on cache hits.
+            lazy: If True, return a ``pl.LazyFrame`` without materializing.
+                  If False (default), collect and return a ``pl.DataFrame``.
+
+        Returns:
+            A DataFrame or LazyFrame containing the index columns and all
+            requested expression aliases.
         """
         self.failed = list()
         exprs_to_add = list()

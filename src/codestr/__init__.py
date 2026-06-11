@@ -12,4 +12,4 @@ from .syntax import (
     Literal as Literal,
 )
 
-__all__ = ["CodeStr", "Call", "Column", "ExprNode", "Literal"]
+__all__ = ["Call", "CodeStr", "Column", "ExprNode", "Literal"]

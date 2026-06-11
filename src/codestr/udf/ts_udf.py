@@ -1,83 +1,98 @@
 """
 时间序列算子 (Time Series Operators)
+
+All TS operators accept optional ``partition_by`` and ``order_by`` keyword
+arguments. When called through the CodeStr engine, these are automatically
+injected from the instance's ``time_col`` / ``asset_col`` configuration.
+When called directly through the compiler, canonical defaults
+(``["asset"]`` / ``["datetime"]``) are used.
 """
 
 import polars as pl
 
 from codestr.udf.registry import udf
 
-over = dict(partition_by=["asset"], order_by=["datetime"])
-
-
-def configure_over(
-    *, partition_by: list[str] | None = None, order_by: list[str] | None = None
-) -> None:
-    """Update the default OVER window for all TS (time-series) operators."""
-    if partition_by is not None:
-        over["partition_by"] = list(partition_by)
-    if order_by is not None:
-        over["order_by"] = list(order_by)
-
-
-@udf(category="ts")
-def ts_max(expr: pl.Expr, windows):
-    return expr.rolling_max(windows).over(**over)
-
-
-@udf(category="ts")
-def ts_min(expr: pl.Expr, windows):
-    return expr.rolling_min(windows).over(**over)
+__all__ = [
+    "ts_delay",
+    "ts_delta",
+    "ts_kurt",
+    "ts_mad",
+    "ts_max",
+    "ts_mean",
+    "ts_mid",
+    "ts_min",
+    "ts_skew",
+    "ts_std",
+    "ts_sum",
+    "ts_var",
+]
 
 
 @udf(category="ts")
-def ts_mean(expr: pl.Expr, windows):
-    return expr.rolling_mean(windows).over(**over)
+def ts_max(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_max(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_std(expr: pl.Expr, windows):
-    return expr.rolling_std(windows).over(**over)
+def ts_min(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_min(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_skew(expr: pl.Expr, windows):
-    return expr.rolling_skew(windows).over(**over)
+def ts_mean(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_mean(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_kurt(expr: pl.Expr, windows):
-    return expr.rolling_kurtosis(windows).over(**over)
+def ts_std(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_std(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_sum(expr: pl.Expr, windows):
-    return expr.rolling_sum(windows).over(**over)
+def ts_skew(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_skew(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_var(expr: pl.Expr, windows):
-    return expr.rolling_var(windows).over(**over)
+def ts_kurt(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_kurtosis(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_mid(expr: pl.Expr, windows):
-    return expr.rolling_median(windows).over(**over)
+def ts_sum(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_sum(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_mad(expr: pl.Expr, windows):
-    return 1.4826 * (expr - expr.rolling_median(windows).over(**over)).abs().rolling_median(
-        windows
-    ).over(**over)
+def ts_var(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_var(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_delay(expr: pl.Expr, windows):
-    """Lag operator: X_{t-d}"""
-    return expr.shift(windows).over(**over)
+def ts_mid(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    return expr.rolling_median(windows).over(partition_by=partition_by, order_by=order_by)
 
 
 @udf(category="ts")
-def ts_delta(expr: pl.Expr, windows):
-    """Delta operator: X_t - X_{t-d}"""
-    return expr.diff(windows).over(**over)
+def ts_mad(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    """Median Absolute Deviation over a rolling window.
+
+    MAD = 1.4826 * median(|x - rolling_median(x)|)
+    The constant 1.4826 scales MAD to be consistent with standard deviation
+    for normally distributed data.
+    """
+    return 1.4826 * (
+        expr - expr.rolling_median(windows).over(partition_by=partition_by, order_by=order_by)
+    ).abs().rolling_median(windows).over(partition_by=partition_by, order_by=order_by)
+
+
+@udf(category="ts")
+def ts_delay(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    """Lag operator: X_{t-d}.  Returns the value *windows* periods ago."""
+    return expr.shift(windows).over(partition_by=partition_by, order_by=order_by)
+
+
+@udf(category="ts")
+def ts_delta(expr: pl.Expr, windows, partition_by=None, order_by=None):
+    """Delta operator: X_t - X_{t-d}.  Difference over *windows* periods."""
+    return expr.diff(windows).over(partition_by=partition_by, order_by=order_by)
