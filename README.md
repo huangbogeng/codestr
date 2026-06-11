@@ -10,8 +10,6 @@ CodeStr 是一个专为量化因子挖掘设计的 DSL → Polars Expr 表达式
 ## 安装
 
 ```bash
-pip install codestr
-# 或开发安装
 git clone https://github.com/huangbogeng/codestr.git
 cd codestr
 uv sync --extra dev
