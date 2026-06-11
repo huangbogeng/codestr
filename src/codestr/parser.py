@@ -144,7 +144,7 @@ for _op in (
     "ge",
 ):
     setattr(ExprBuilder, _op, ExprBuilder._make_bin(_op))
-setattr(ExprBuilder, "implicit_mul", ExprBuilder._make_bin("mul"))
+ExprBuilder.implicit_mul = ExprBuilder._make_bin("mul")
 
 
 _parser: Lark | None = None
