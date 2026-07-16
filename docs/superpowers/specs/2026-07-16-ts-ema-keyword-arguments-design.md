@@ -14,6 +14,21 @@ This design supersedes the dependency-only implementation scope in
 Set the published dependency to `polars>=1.42.1` and refresh `uv.lock` to Polars 1.42.1. Do not add
 an upper bound.
 
+## `lidb` Reference
+
+The implementation uses
+`workspace/yd/lidb-2026.7.15.2/lidb/qdf/udf/d_udf.py::d_ewmmean` as the EMA semantic reference. Its
+recursive EMA settings match this design: `adjust=False`, `min_samples=1`, followed by a grouped and
+ordered Polars window.
+
+The `lidb` parser keeps keyword arguments as mutable dictionaries and makes expressions hashable by
+hashing their rendered strings. CodeStr will not copy that cache-key strategy. It depends on parsed
+objects never being mutated and couples cache identity to rendering. CodeStr already models AST nodes
+as frozen structural values, so an immutable keyword-argument value is the safer fit.
+
+The broader `lidb.QDF` cache lifecycle, dependency graph, and data-retention behavior are outside this
+change. Only its EMA semantics and cache regression scenarios are used as references.
+
 ## `ts_ema`
 
 Add the public DSL operator:
@@ -79,6 +94,7 @@ Add test coverage for:
 - immutable, hashable keyword arguments and correct DSL rendering;
 - keyword arguments through pure compilation and stateful `CodeStr.sql()`;
 - repeated stateful queries hitting the expression cache without errors;
+- the same keyword-argument formula reused under a different alias;
 - syntax analysis helpers on expressions containing keyword arguments.
 
 Run the complete pytest suite, Ruff checks, formatting checks, and package build after implementation.
