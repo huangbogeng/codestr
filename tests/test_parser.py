@@ -163,6 +163,12 @@ class TestFunctionCalls:
         with pytest.raises(dataclasses.FrozenInstanceError):
             keyword.name = "upper_bound"  # type: ignore
 
+    def test_operator_keyword_arguments_keep_function_rendering(self):
+        node = parse("add(left=value, right=other)")
+
+        assert node.alias == "add(left=value, right=other)"
+        assert parse(node.alias) == node
+
     def test_normalize_if(self):
         """if(a, b, c) should normalize to if_(a, b, c)"""
         node = parse("if(close > 0, close, 0)")

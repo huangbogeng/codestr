@@ -49,6 +49,9 @@ class TestTSEma:
         )["expected"]
 
         assert actual.equals(expected)
+        assert actual.to_list() == pytest.approx(
+            [2.7142857142857144, 1.0, None, 10.0, 13.11111111111111, 11.333333333333334]
+        )
 
     def test_span_one_returns_input(self, ts_df):
         node = Call("ts_ema", (Column("close"), Literal(1)))

@@ -120,6 +120,8 @@ _binary_map = {
 
 def _render_call(fn_name: str, args: tuple[CallArg, ...]) -> str:
     """Render a Call node's alias from its fn_name and args."""
+    if any(isinstance(arg, KeywordArg) for arg in args):
+        return f"{fn_name}({', '.join(str(arg) for arg in args)})"
     if fn_name == "if_":
         return f"{args[0]}?{args[1]}:{args[2]}"
     if fn_name in _unary_map:
