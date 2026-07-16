@@ -15,6 +15,7 @@ from codestr.udf.registry import udf
 __all__ = [
     "ts_delay",
     "ts_delta",
+    "ts_ema",
     "ts_kurt",
     "ts_mad",
     "ts_max",
@@ -41,6 +42,17 @@ def ts_min(expr: pl.Expr, windows, partition_by=None, order_by=None):
 @udf(category="ts")
 def ts_mean(expr: pl.Expr, windows, partition_by=None, order_by=None):
     return expr.rolling_mean(windows).over(partition_by=partition_by, order_by=order_by)
+
+
+@udf(category="ts")
+def ts_ema(expr: pl.Expr, span: int, partition_by=None, order_by=None):
+    """Recursive exponential moving average over each ordered entity series."""
+    if type(span) is not int or span < 1:
+        raise ValueError("span must be a positive integer")
+    return expr.ewm_mean(span=span, adjust=False, min_samples=1).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")

@@ -111,6 +111,18 @@ class TestSQLInteractiveMode:
         assert second["clipped_again"].to_list() == first["clipped"].to_list()
         assert len(cs._expr_cache) == cache_size
 
+    def test_ts_ema_can_feed_later_expression_in_same_sql(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        result = cs.sql(
+            "ts_ema(close, 2) as ema2",
+            "ts_delta(ema2, 1) as ema_delta",
+        )
+
+        assert cs.failed == []
+        assert {"ema2", "ema_delta"} <= set(result.columns)
+        assert result["ema_delta"].null_count() == 2
+
     def test_sql_cover_overwrites(self, sample_df):
         cs = CodeStr(sample_df)
         cs.sql("close + 1 as offset", cover=True)
