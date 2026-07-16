@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 from codestr.compiler import compile as ast_compile
+from codestr.parser import parse
 from codestr.syntax import Call, Column, Literal
 
 
@@ -100,6 +101,12 @@ class TestCompileCall:
         df = pl.DataFrame({"a": [10.0, 5.0], "b": [5.0, 10.0]})
         result = df.select(expr)
         assert result["abs((a-b))"].to_list() == [5.0, 5.0]
+
+    def test_compile_keyword_argument(self):
+        df = pl.DataFrame({"close": [-1.0, 2.0]})
+        result = df.select(ast_compile(parse("clip(close, lower_bound=0)")))
+
+        assert result["clip(close, lower_bound=0)"].to_list() == [0.0, 2.0]
 
 
 class TestCompileErrors:

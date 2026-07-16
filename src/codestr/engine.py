@@ -13,6 +13,7 @@ from codestr.errors import CompileError, FailError, PolarsError
 from codestr.parser import parse as _parse
 from codestr.syntax import (
     Call,
+    KeywordArg,
 )
 from codestr.syntax import (
     depth as _depth,
@@ -195,12 +196,15 @@ class CodeStr:
         if not isinstance(node, Call):
             return
         if node.fn_name in ("sub", "div") and len(node.args) == 2:
-            left, right = node.args
+            left, right = (
+                arg.value if isinstance(arg, KeywordArg) else arg for arg in node.args
+            )
             if str(left) == str(right):
                 reasons.append(f"redundant:{node.fn_name}")
         for arg in node.args:
-            if isinstance(arg, Call):
-                self._check_redundant(arg, reasons)
+            value = arg.value if isinstance(arg, KeywordArg) else arg
+            if isinstance(value, Call):
+                self._check_redundant(value, reasons)
 
     def _check_rpn(self, rpn, reasons: list[str]):
         from codestr.tokens import TokenType

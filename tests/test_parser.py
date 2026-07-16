@@ -1,10 +1,12 @@
 """Tests for DSL parser (parser.py)."""
 
+import dataclasses
+
 import pytest
 
 from codestr.errors import ParseError
 from codestr.parser import parse
-from codestr.syntax import Call, Column, Literal
+from codestr.syntax import Call, Column, KeywordArg, Literal
 
 
 class TestLeafNodes:
@@ -151,6 +153,15 @@ class TestFunctionCalls:
         node = parse("clip(close, lower_bound=0.1)")
         assert node.fn_name == "clip"
         assert len(node.args) == 2
+        assert node.args[1] == KeywordArg("lower_bound", Literal(0.1))
+        assert node.alias == "clip(close, lower_bound=0.1)"
+        assert hash(node) == hash(parse("clip(close, lower_bound=0.1)"))
+
+    def test_keyword_argument_is_immutable(self):
+        keyword = parse("clip(close, lower_bound=0)").args[1]
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            keyword.name = "upper_bound"  # type: ignore
 
     def test_normalize_if(self):
         """if(a, b, c) should normalize to if_(a, b, c)"""

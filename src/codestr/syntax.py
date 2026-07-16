@@ -71,7 +71,31 @@ class Literal(ExprNode):
         return self.value == other.value
 
 
-# ---- Internal node --------------------------------------------------------
+# ---- Internal nodes -------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class KeywordArg:
+    """An immutable keyword argument attached to a :class:`Call`."""
+
+    name: str
+    value: ExprNode
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise TypeError("Keyword argument name must be a non-empty string")
+        if not isinstance(self.value, ExprNode):
+            raise TypeError("Keyword argument value must be an expression node")
+
+    def __str__(self) -> str:
+        return f"{self.name}={self.value}"
+
+
+CallArg = ExprNode | KeywordArg
+
+
+def _arg_value(arg: CallArg) -> ExprNode:
+    return arg.value if isinstance(arg, KeywordArg) else arg
 
 _unary_map = {"neg": "-", "not_": "!"}
 _binary_map = {
@@ -93,7 +117,7 @@ _binary_map = {
 }
 
 
-def _render_call(fn_name: str, args: tuple[ExprNode, ...]) -> str:
+def _render_call(fn_name: str, args: tuple[CallArg, ...]) -> str:
     """Render a Call node's alias from its fn_name and args."""
     if fn_name == "if_":
         return f"{args[0]}?{args[1]}:{args[2]}"
@@ -109,10 +133,14 @@ class Call(ExprNode):
     """A function / operator invocation, e.g. ``ts_mean(close, 5)``."""
 
     fn_name: str
-    args: tuple[ExprNode, ...] = ()
+    args: tuple[CallArg, ...] = ()
     _alias: str = ""  # cached rendering; set via __post_init__
 
     def __post_init__(self) -> None:
+        if not isinstance(self.args, tuple) or not all(
+            isinstance(arg, (ExprNode, KeywordArg)) for arg in self.args
+        ):
+            raise TypeError("Call arguments must be expression nodes or keyword arguments")
         if not self._alias:
             object.__setattr__(self, "_alias", _render_call(self.fn_name, self.args))
 
@@ -143,7 +171,7 @@ def depth(node: ExprNode) -> int:
     if isinstance(node, Call):
         max_child = 0
         for arg in node.args:
-            max_child = max(max_child, depth(arg))
+            max_child = max(max_child, depth(_arg_value(arg)))
         return 1 + max_child
     raise TypeError(f"Unknown node type: {type(node)}")
 
@@ -155,7 +183,7 @@ def node_count(node: ExprNode) -> int:
     if isinstance(node, Call):
         total = 1
         for arg in node.args:
-            total += node_count(arg)
+            total += node_count(_arg_value(arg))
         return total
     raise TypeError(f"Unknown node type: {type(node)}")
 
@@ -167,7 +195,7 @@ def to_rpn(node: ExprNode) -> list[Token]:
     def traverse(n: ExprNode) -> None:
         if isinstance(n, Call):
             for arg in n.args:
-                traverse(arg)
+                traverse(_arg_value(arg))
             rpn.append(
                 Token(
                     type=TokenType.OPERATOR,
@@ -203,7 +231,7 @@ def descendants(node: ExprNode) -> list[tuple[str, int]]:
     if isinstance(node, Call):
         result.append((str(node), depth(node)))
         for arg in node.args:
-            result.extend(descendants(arg))
+            result.extend(descendants(_arg_value(arg)))
     else:
         result.append((str(node), 0))
     return result

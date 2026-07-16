@@ -90,6 +90,27 @@ class TestSQLInteractiveMode:
         result2 = cs.sql("close + 1 as offset", cover=False)
         assert "offset" in result2.columns
 
+    def test_sql_keyword_argument_reuses_cache_with_new_alias(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        first = cs.sql("clip(close, lower_bound=101) as clipped")
+        cache_size = len(cs._expr_cache)
+        second = cs.sql("clip(close, lower_bound=101) as clipped_again")
+
+        assert cs.failed == []
+        assert first["clipped"].to_list() == [
+            101.0,
+            200.0,
+            101.0,
+            198.0,
+            102.0,
+            202.0,
+            103.0,
+            204.0,
+        ]
+        assert second["clipped_again"].to_list() == first["clipped"].to_list()
+        assert len(cs._expr_cache) == cache_size
+
     def test_sql_cover_overwrites(self, sample_df):
         cs = CodeStr(sample_df)
         cs.sql("close + 1 as offset", cover=True)
@@ -128,6 +149,17 @@ class TestCheckExpr:
         cs = CodeStr(sample_df)
         result = cs.check_expr("")
         assert result["valid"] is False
+
+    def test_keyword_argument_expression(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        result = cs.check_expr("clip(abs(close), lower_bound=0)")
+
+        assert result == {
+            "valid": True,
+            "reasons": [],
+            "expr": "clip(abs(close), lower_bound=0)",
+        }
 
 
 class TestClearCache:

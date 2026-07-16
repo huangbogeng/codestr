@@ -5,7 +5,7 @@ import inspect
 import polars as pl
 
 from codestr.errors import CompileError
-from codestr.syntax import Call, Column, ExprNode, Literal
+from codestr.syntax import Call, Column, ExprNode, KeywordArg, Literal
 from codestr.udf.registry import UDFRegistry
 
 # Canonical window defaults for when the caller does not provide ts_over/cs_over.
@@ -111,13 +111,14 @@ def _compile(
         _inject_over(meta.category, sig_params, ts_over, cs_over, kwargs)
 
         for arg in node.args:
-            if isinstance(arg, dict):
-                for k, v in arg.items():
-                    kwargs[k] = (
-                        _resolve(v, registry, dims, ts_over, cs_over)
-                        if isinstance(v, ExprNode)
-                        else v
-                    )
+            if isinstance(arg, KeywordArg):
+                kwargs[arg.name] = _resolve(
+                    arg.value,
+                    registry,
+                    dims,
+                    ts_over,
+                    cs_over,
+                )
             else:
                 args.append(_resolve(arg, registry, dims, ts_over, cs_over))
 

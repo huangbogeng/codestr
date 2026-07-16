@@ -5,7 +5,7 @@ import re
 from lark import Lark, Transformer, v_args
 
 from codestr.errors import ParseError
-from codestr.syntax import Call, Column, ExprNode, Literal
+from codestr.syntax import Call, Column, ExprNode, KeywordArg, Literal
 
 _GRAMMAR = r"""
     start: expr
@@ -77,10 +77,10 @@ class ExprBuilder(Transformer):
         parts = [i.name if isinstance(i, Column) else str(i) for i in items]
         return Column(".".join(parts))
 
-    def keyword_arg(self, item) -> dict:
+    def keyword_arg(self, item) -> KeywordArg:
         key, val = item
         key = key.name if isinstance(key, Column) else str(key)
-        return {key: val}
+        return KeywordArg(key, val)
 
     # ---- top-level ----------------------------------------------------------
 

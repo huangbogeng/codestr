@@ -5,6 +5,7 @@ import pytest
 from codestr.syntax import (
     Call,
     Column,
+    KeywordArg,
     Literal,
     common_subexprs,
     depth,
@@ -68,6 +69,18 @@ class TestCall:
         with pytest.raises(Exception):  # noqa: B017
             Call(fn_name="add", args=(Column("x"),)).fn_name = "sub"  # type: ignore
 
+    def test_rejects_mutable_argument_dicts(self):
+        with pytest.raises(TypeError, match="Call arguments"):
+            Call("clip", (Column("close"), {"lower_bound": Literal(0)}))  # type: ignore
+
+    def test_keyword_argument_rendering(self):
+        node = Call(
+            "clip",
+            (Column("close"), KeywordArg("lower_bound", Literal(0))),
+        )
+
+        assert node.alias == "clip(close, lower_bound=0)"
+
 
 class TestDepth:
     def test_leaf_depth(self):
@@ -84,6 +97,17 @@ class TestDepth:
         node = Call(fn_name="add", args=(inner, Column("c")))
         assert depth(node) == 3
 
+    def test_keyword_argument_is_transparent(self):
+        node = Call(
+            "clip",
+            (
+                Call("abs", (Column("close"),)),
+                KeywordArg("lower_bound", Literal(0)),
+            ),
+        )
+
+        assert depth(node) == 3
+
 
 class TestNodeCount:
     def test_leaf_count(self):
@@ -97,6 +121,17 @@ class TestNodeCount:
         inner = Call(fn_name="mul", args=(Column("a"), Column("b")))
         node = Call(fn_name="add", args=(inner, Column("c")))
         assert node_count(node) == 5  # 2 calls + 3 leaves
+
+    def test_keyword_argument_is_transparent(self):
+        node = Call(
+            "clip",
+            (
+                Call("abs", (Column("close"),)),
+                KeywordArg("lower_bound", Literal(0)),
+            ),
+        )
+
+        assert node_count(node) == 4
 
 
 class TestRPN:
@@ -117,12 +152,35 @@ class TestRPN:
         rpn = to_rpn(node)
         assert [t.name for t in rpn] == ["a", "b", "add", "c", "mul"]
 
+    def test_keyword_argument_is_transparent(self):
+        node = Call(
+            "clip",
+            (
+                Call("abs", (Column("close"),)),
+                KeywordArg("lower_bound", Literal(0)),
+            ),
+        )
+
+        assert [token.name for token in to_rpn(node)] == ["close", "abs", "0", "clip"]
+
 
 class TestDescendants:
     def test_flat_list(self):
         node = Call(fn_name="add", args=(Column("a"), Column("b")))
         desc = descendants(node)
         assert len(desc) == 3  # (a+b, 2), (a, 0), (b, 0)
+
+    def test_keyword_argument_is_transparent(self):
+        node = Call(
+            "clip",
+            (Column("close"), KeywordArg("lower_bound", Literal(0))),
+        )
+
+        assert descendants(node) == [
+            ("clip(close, lower_bound=0)", 2),
+            ("close", 0),
+            ("0", 0),
+        ]
 
 
 class TestCommonSubexprs:
