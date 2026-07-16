@@ -1,12 +1,12 @@
 # 算子参考手册
 
-CodeStr 内置 **88 个算子**，按功能分为三大类：
+CodeStr 内置 **89 个算子**，按功能分为三大类：
 
 | 类别 | 模块 | 数量 | 窗口注入 |
 |------|------|:---:|---------|
 | 基础算子 | `base_udf` | 55 | 无（逐元素计算） |
 | 截面算子 | `cs_udf` | 21 | `over(partition_by=order_by, order_by=partition_by)` |
-| 时序算子 | `ts_udf` | 12 | `over(partition_by=partition_by, order_by=order_by)` |
+| 时序算子 | `ts_udf` | 13 | `over(partition_by=partition_by, order_by=order_by)` |
 
 ---
 
@@ -274,13 +274,14 @@ cs.sql("cs_midby(factor, sector, cap_group) as group_median")
 
 > 编译器自动注入窗口配置：`over(partition_by=asset_cols, order_by=datetime_cols)`
 
-所有时序算子的通用签名为 `(expr, windows)`，其中 `windows` 是整数，表示回溯窗口大小。
+滚动、滞后与差分算子的通用签名为 `(expr, windows)`，其中 `windows` 是整数，表示回溯窗口大小。`ts_ema` 的签名为 `(expr, span)`，`span` 必须是正整数。
 
 ### 滚动统计
 
 | 算子 | 说明 | 底层实现 |
 |------|------|------|
 | `ts_mean` | 滚动均值 | `rolling_mean(windows)` |
+| `ts_ema` | 递归指数移动平均 | `ewm_mean(span=span, adjust=False, min_samples=1)` |
 | `ts_sum` | 滚动求和 | `rolling_sum(windows)` |
 | `ts_std` | 滚动标准差 | `rolling_std(windows)` |
 | `ts_var` | 滚动方差 | `rolling_var(windows)` |
@@ -296,6 +297,7 @@ cs.sql("cs_midby(factor, sector, cap_group) as group_median")
 示例：
 ```python
 cs.sql("ts_mean(close, 5) as ma5")
+cs.sql("ts_ema(close, 10) as ema10")
 cs.sql("ts_std(close, 20) as vol20")
 cs.sql("ts_max(high, 20) as hh20")
 cs.sql("ts_mad(close, 20) as mad20")

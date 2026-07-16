@@ -106,7 +106,7 @@ cs.sql("ts_ewm(close, 10) as ewm10")
 
 **截面算子** (`cs_udf`)：`cs_rank`, `cs_zscore`, `cs_demean`, `cs_mean`, `cs_std`, `cs_var`, `cs_skew`, `cs_ic`, `cs_corr`, `cs_slope`, `cs_resid`, `cs_qcut`, `cs_midby`, `cs_meanby` 等
 
-**时序算子** (`ts_udf`)：`ts_mean`, `ts_sum`, `ts_std`, `ts_var`, `ts_skew`, `ts_kurt`, `ts_max`, `ts_min`, `ts_mid`, `ts_delay`, `ts_delta`, `ts_mad` 等
+**时序算子** (`ts_udf`)：`ts_mean`, `ts_ema`, `ts_sum`, `ts_std`, `ts_var`, `ts_skew`, `ts_kurt`, `ts_max`, `ts_min`, `ts_mid`, `ts_delay`, `ts_delta`, `ts_mad` 等
 
 ## 项目结构
 
