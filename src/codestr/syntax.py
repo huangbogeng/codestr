@@ -97,6 +97,7 @@ CallArg = ExprNode | KeywordArg
 def _arg_value(arg: CallArg) -> ExprNode:
     return arg.value if isinstance(arg, KeywordArg) else arg
 
+
 _unary_map = {"neg": "-", "not_": "!"}
 _binary_map = {
     "add": "+",

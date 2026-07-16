@@ -196,9 +196,7 @@ class CodeStr:
         if not isinstance(node, Call):
             return
         if node.fn_name in ("sub", "div") and len(node.args) == 2:
-            left, right = (
-                arg.value if isinstance(arg, KeywordArg) else arg for arg in node.args
-            )
+            left, right = (arg.value if isinstance(arg, KeywordArg) else arg for arg in node.args)
             if str(left) == str(right):
                 reasons.append(f"redundant:{node.fn_name}")
         for arg in node.args:
