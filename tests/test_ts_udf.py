@@ -2,10 +2,13 @@
 
 import polars as pl
 import pytest
+from polars.testing import assert_series_equal
 
 from codestr.compiler import compile as ast_compile
 from codestr.errors import CompileError
+from codestr.parser import parse
 from codestr.syntax import Call, Column, Literal
+from codestr.udf.ts_udf import ts_mean
 
 
 @pytest.fixture
@@ -18,6 +21,62 @@ def ts_df() -> pl.DataFrame:
             "close": [100.0, 102.0, 104.0, 103.0, 105.0],
         }
     )
+
+
+@pytest.fixture
+def unordered_ts_df() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "datetime": [3, 1, 2, 4, 3, 1, 2, 4],
+            "asset": ["A", "A", "A", "A", "B", "B", "B", "B"],
+            "value": [4.0, 1.0, None, 8.0, 30.0, 10.0, 20.0, None],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("fn_name", "method_name"),
+    [
+        ("ts_max", "rolling_max"),
+        ("ts_min", "rolling_min"),
+        ("ts_mean", "rolling_mean"),
+        ("ts_std", "rolling_std"),
+        ("ts_skew", "rolling_skew"),
+        ("ts_kurt", "rolling_kurtosis"),
+        ("ts_sum", "rolling_sum"),
+        ("ts_var", "rolling_var"),
+        ("ts_mid", "rolling_median"),
+    ],
+)
+@pytest.mark.parametrize("min_samples", [None, 1])
+def test_rolling_min_samples_matches_polars(
+    unordered_ts_df,
+    fn_name,
+    method_name,
+    min_samples,
+):
+    if min_samples is None:
+        source = f"{fn_name}(value, 3)"
+        rolling_kwargs = {}
+    else:
+        source = f"{fn_name}(value, 3, min_samples={min_samples})"
+        rolling_kwargs = {"min_samples": min_samples}
+
+    node = parse(source)
+    actual = unordered_ts_df.select(ast_compile(node))[node.alias]
+    expected = unordered_ts_df.select(
+        getattr(pl.col("value"), method_name)(3, **rolling_kwargs)
+        .over(partition_by=["asset"], order_by=["datetime"])
+        .alias("expected")
+    )["expected"]
+
+    assert_series_equal(actual.rename("expected"), expected)
+
+
+@pytest.mark.parametrize("min_samples", [0, -1, 1.5, True])
+def test_rolling_rejects_invalid_min_samples(min_samples):
+    with pytest.raises(ValueError, match="min_samples must be a positive integer"):
+        ts_mean(pl.col("value"), 3, min_samples=min_samples)
 
 
 class TestTSMean:

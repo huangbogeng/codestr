@@ -29,19 +29,58 @@ __all__ = [
 ]
 
 
-@udf(category="ts")
-def ts_max(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_max(windows).over(partition_by=partition_by, order_by=order_by)
+def _validate_min_samples(min_samples: int | None) -> int | None:
+    if min_samples is not None and (type(min_samples) is not int or min_samples < 1):
+        raise ValueError("min_samples must be a positive integer")
+    return min_samples
 
 
 @udf(category="ts")
-def ts_min(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_min(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_max(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_max(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
-def ts_mean(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_mean(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_min(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_min(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
+
+
+@udf(category="ts")
+def ts_mean(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_mean(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
@@ -56,33 +95,99 @@ def ts_ema(expr: pl.Expr, span: int, partition_by=None, order_by=None):
 
 
 @udf(category="ts")
-def ts_std(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_std(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_std(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_std(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
-def ts_skew(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_skew(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_skew(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_skew(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
-def ts_kurt(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_kurtosis(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_kurt(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_kurtosis(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
-def ts_sum(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_sum(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_sum(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_sum(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
-def ts_var(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_var(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_var(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_var(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
-def ts_mid(expr: pl.Expr, windows, partition_by=None, order_by=None):
-    return expr.rolling_median(windows).over(partition_by=partition_by, order_by=order_by)
+def ts_mid(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
+    min_samples = _validate_min_samples(min_samples)
+    return expr.rolling_median(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")

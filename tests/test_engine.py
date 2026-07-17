@@ -111,6 +111,18 @@ class TestSQLInteractiveMode:
         assert second["clipped_again"].to_list() == first["clipped"].to_list()
         assert len(cs._expr_cache) == cache_size
 
+    def test_sql_min_samples_keyword_reuses_cache(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        first = cs.sql("ts_mean(close, 3, min_samples=1) as mean_fast")
+        cache_size = len(cs._expr_cache)
+        second = cs.sql("ts_mean(close, 3, min_samples=1) as mean_fast_again")
+
+        assert cs.failed == []
+        assert first["mean_fast"].null_count() == 0
+        assert second["mean_fast_again"].to_list() == first["mean_fast"].to_list()
+        assert len(cs._expr_cache) == cache_size
+
     def test_ts_ema_can_feed_later_expression_in_same_sql(self, sample_df):
         cs = CodeStr(sample_df)
 
