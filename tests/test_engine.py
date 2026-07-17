@@ -5,6 +5,7 @@ import pytest
 
 from codestr.engine import CodeStr
 from codestr.errors import CompileError
+from codestr.udf.registry import UDFMeta, UDFRegistry
 
 
 class TestCodeStrInit:
@@ -277,6 +278,58 @@ class TestSQLInteractiveMode:
         )
 
         assert actual["factor"].equals(expected["factor"])
+
+    def test_mixed_window_reuses_root_cache_with_new_alias(self, mixed_window_df):
+        cs = CodeStr(mixed_window_df, align=False)
+
+        first = cs.sql("ts_mean(cs_moderate(x), 2, min_samples=1) as first")
+        cache_size = len(cs._expr_cache)
+        second = cs.sql("ts_mean(cs_moderate(x), 2, min_samples=1) as second")
+
+        assert cs.failed == []
+        assert second["second"].to_list() == first["first"].to_list()
+        assert len(cs._expr_cache) == cache_size
+
+    def test_mixed_window_cover_recomputes_internal_stages(self, mixed_window_df):
+        cs = CodeStr(mixed_window_df, align=False)
+        first = cs.sql("ts_mean(cs_moderate(x), 2, min_samples=1) as factor")
+
+        cs._data_ = cs._data_.with_columns((pl.col("x") * 2).alias("x"))
+        second = cs.sql(
+            "ts_mean(cs_moderate(x), 2, min_samples=1) as factor",
+            cover=True,
+        )
+
+        assert second["factor"].to_list() != first["factor"].to_list()
+        assert second["factor"].fill_null(0).sum() == pytest.approx(
+            2 * first["factor"].fill_null(0).sum()
+        )
+
+    def test_failed_mixed_plan_does_not_leak_internal_columns(self, mixed_window_df):
+        cs = CodeStr(mixed_window_df, align=False)
+        before = set(cs.data.columns)
+
+        def fail_after_child(
+            expr,
+            partition_by=None,
+            order_by=None,
+        ):
+            raise ValueError("planned failure")
+
+        UDFRegistry.get_instance().register(
+            UDFMeta(
+                name="ts_fail_after_child",
+                fn=fail_after_child,
+                category="ts",
+            )
+        )
+        result = cs.sql("ts_fail_after_child(cs_moderate(x)) as invalid")
+
+        assert len(cs.failed) == 1
+        assert "planned failure" in str(cs.failed[0])
+        assert set(cs._data_.collect_schema().names()) == before
+        assert not any(name.startswith("__codestr_") for name in cs._data_.collect_schema().names())
+        assert "invalid" not in result.columns
 
 
 class TestCheckExpr:
