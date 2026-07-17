@@ -123,6 +123,16 @@ class TestSQLInteractiveMode:
         assert second["mean_fast_again"].to_list() == first["mean_fast"].to_list()
         assert len(cs._expr_cache) == cache_size
 
+    def test_sql_cache_does_not_bypass_min_samples_type_validation(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        cs.sql("ts_mean(close, 3, min_samples=1) as valid")
+        result = cs.sql("ts_mean(close, 3, min_samples=1.0) as invalid")
+
+        assert len(cs.failed) == 1
+        assert "min_samples must be a positive integer" in str(cs.failed[0])
+        assert "invalid" not in result.columns
+
     def test_ts_ema_can_feed_later_expression_in_same_sql(self, sample_df):
         cs = CodeStr(sample_df)
 

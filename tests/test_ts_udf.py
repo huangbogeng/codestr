@@ -248,6 +248,14 @@ class TestTSDelta:
         assert vals[1] == 2.0  # 102-100
 
 
+@pytest.mark.parametrize("fn_name", ["ts_delay", "ts_delta"])
+def test_nonrolling_operators_reject_min_samples(fn_name):
+    node = parse(f"{fn_name}(value, 1, min_samples=1)")
+
+    with pytest.raises(CompileError, match="unexpected keyword argument 'min_samples'"):
+        ast_compile(node)
+
+
 class TestTSSkew:
     def test_ts_skew(self, ts_df):
         node = Call("ts_skew", (Column("close"), Literal(5)))

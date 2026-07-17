@@ -274,7 +274,7 @@ cs.sql("cs_midby(factor, sector, cap_group) as group_median")
 
 > 编译器自动注入窗口配置：`over(partition_by=asset_cols, order_by=datetime_cols)`
 
-滚动统计的通用签名为 `(expr, windows, min_samples=None)`，其中 `windows` 是整数，表示回溯窗口大小；`min_samples` 必须是正整数，省略时沿用 Polars 默认值 `None`（需要完整窗口）。`ts_ema` 的签名为 `(expr, span, min_samples=1)`，`span` 和 `min_samples` 都必须是正整数。滞后与差分算子仍使用 `(expr, windows)`，不接收 `min_samples`。
+滚动统计的通用签名为 `(expr, windows, *, min_samples=None)`，其中 `windows` 是整数，表示回溯窗口大小；`min_samples` 是仅限关键字的正整数参数，省略时沿用 Polars 默认值 `None`（需要完整窗口）。`ts_ema` 的签名为 `(expr, span, *, min_samples=1)`，`span` 和 `min_samples` 都必须是正整数。滞后与差分算子仍使用 `(expr, windows)`，不接收 `min_samples`。
 
 ### 滚动统计
 

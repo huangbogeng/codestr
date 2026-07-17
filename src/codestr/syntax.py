@@ -63,12 +63,12 @@ class Literal(ExprNode):
         return str(self.value)
 
     def __hash__(self) -> int:
-        return hash(("literal", self.value))
+        return hash(("literal", type(self.value), self.value))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Literal):
             return NotImplemented
-        return self.value == other.value
+        return type(self.value) is type(other.value) and self.value == other.value
 
 
 # ---- Internal nodes -------------------------------------------------------

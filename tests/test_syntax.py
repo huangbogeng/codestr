@@ -36,10 +36,13 @@ class TestLiteral:
         assert Literal(5) == Literal(5)
         assert Literal(5.0) == Literal(5.0)
         assert Literal(5) != Literal(6)
+        assert Literal(5) != Literal(5.0)
 
     def test_hash(self):
-        d = {Literal(5): "five"}
-        assert d[Literal(5)] == "five"
+        d = {Literal(5): "integer", Literal(5.0): "float"}
+        assert len(d) == 2
+        assert d[Literal(5)] == "integer"
+        assert d[Literal(5.0)] == "float"
 
 
 class TestCall:
