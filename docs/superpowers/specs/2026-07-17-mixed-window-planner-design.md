@@ -214,6 +214,22 @@ Sequential `with_columns` nodes create the required logical projection
 boundary. They do not force eager collection, and Polars retains both stages in
 the optimized lazy plan because the outer stage depends on the inner column.
 
+Expressions passed to one `sql()` call continue to execute from left to right.
+Planning and executing a later expression must use the lazy graph produced by
+all earlier expressions in that call. This allows a mixed-window expression to
+consume a public alias created immediately before it:
+
+```python
+cs.sql(
+    "x * 2 as scaled",
+    "ts_mean(cs_moderate(scaled), 60) as factor",
+)
+```
+
+The planner lowers only the second expression. Its internal CS stage reads
+`scaled` from the projection created by the first expression, and its TS stage
+reads the internal CS column.
+
 Only the requested public aliases are selected into the returned frame.
 
 ## Engine And Cache Integration
@@ -271,6 +287,8 @@ Add focused coverage for:
 - sibling TS and CS windows not being classified as nested;
 - pure `compile()` rejecting both mixed directions with the unsafe path;
 - explicit two-expression SQL remaining compatible;
+- a mixed expression depending on an alias created by the preceding expression
+  in the same `sql()` call;
 - eager and lazy SQL results matching;
 - custom `partition_by` and `order_by` configurations;
 - root cache reuse with a different output alias;
