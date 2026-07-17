@@ -363,9 +363,9 @@ class CodeStr:
         self._data_ = self._data_.with_columns(*exprs_to_add)
 
         if lazy:
-            self._expr_cache.update(self._cur_expr_cache)
             result = self._data_.select(*self.index, *exprs_select)
-            self._data_ = _data_saved  # roll back: don't accumulate in lazy mode
+            self._data_ = _data_saved
+            self._cur_expr_cache = {}
             return result
 
         current_cols = set(self._data_.collect_schema().names())

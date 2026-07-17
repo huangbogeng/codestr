@@ -186,6 +186,98 @@ class TestSQLInteractiveMode:
         assert actual_engine.failed == []
         assert actual["factor"].equals(expected["factor"])
 
+    def test_mixed_window_uses_preceding_alias_in_same_sql(self, mixed_window_df):
+        actual_engine = CodeStr(mixed_window_df, align=False)
+        actual = actual_engine.sql(
+            "x * 2 as scaled",
+            "ts_mean(cs_moderate(scaled), 2, min_samples=1) as factor",
+        ).sort(["asset", "datetime"])
+
+        expected_engine = CodeStr(mixed_window_df, align=False)
+        expected = expected_engine.sql(
+            "x * 2 as scaled",
+            "cs_moderate(scaled) as moderate",
+            "ts_mean(moderate, 2, min_samples=1) as factor",
+        ).sort(["asset", "datetime"])
+
+        assert actual_engine.failed == []
+        assert actual["factor"].equals(expected["factor"])
+        assert actual.filter(pl.col("asset") == "A")["factor"].head(4).to_list() == [
+            2.0,
+            3.0,
+            5.0,
+            7.0,
+        ]
+
+    def test_mixed_window_lazy_matches_eager(self, mixed_window_df):
+        eager_engine = CodeStr(mixed_window_df, align=False)
+        eager = eager_engine.sql("ts_mean(cs_moderate(x), 2, min_samples=1) as factor").sort(
+            ["asset", "datetime"]
+        )
+
+        lazy_engine = CodeStr(mixed_window_df, align=False)
+        lazy = (
+            lazy_engine.sql(
+                "ts_mean(cs_moderate(x), 2, min_samples=1) as factor",
+                lazy=True,
+            )
+            .collect()
+            .sort(["asset", "datetime"])
+        )
+
+        assert lazy["factor"].equals(eager["factor"])
+        assert lazy_engine._expr_cache == {}
+
+    def test_mixed_window_respects_custom_over_columns(self):
+        df = pl.DataFrame(
+            {
+                "trade_date": [1, 1, 2, 2, 3, 3],
+                "symbol": ["A", "B", "A", "B", "A", "B"],
+                "x": [1.0, 3.0, 2.0, 6.0, 4.0, 8.0],
+            }
+        )
+        actual_engine = CodeStr(
+            df,
+            index=("trade_date", "symbol"),
+            partition_by=["symbol"],
+            order_by=["trade_date"],
+            align=False,
+        )
+        actual = actual_engine.sql("ts_mean(cs_moderate(x), 2, min_samples=1) as factor").sort(
+            ["symbol", "trade_date"]
+        )
+
+        expected = (
+            df.lazy()
+            .with_columns(
+                (
+                    pl.col("x")
+                    - pl.col("x")
+                    .mean()
+                    .over(
+                        partition_by=["trade_date"],
+                        order_by=["symbol"],
+                    )
+                )
+                .abs()
+                .alias("moderate")
+            )
+            .with_columns(
+                pl.col("moderate")
+                .rolling_mean(2, min_samples=1)
+                .over(
+                    partition_by=["symbol"],
+                    order_by=["trade_date"],
+                )
+                .alias("factor")
+            )
+            .select("trade_date", "symbol", "factor")
+            .collect()
+            .sort(["symbol", "trade_date"])
+        )
+
+        assert actual["factor"].equals(expected["factor"])
+
 
 class TestCheckExpr:
     def test_valid_expr(self, sample_df):
