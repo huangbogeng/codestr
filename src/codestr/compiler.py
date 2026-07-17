@@ -5,6 +5,7 @@ import inspect
 import polars as pl
 
 from codestr.errors import CompileError
+from codestr.planner import find_mixed_window_boundary
 from codestr.syntax import Call, Column, ExprNode, KeywordArg, Literal
 from codestr.udf.registry import UDFRegistry
 
@@ -41,6 +42,13 @@ def compile(
     """
     if registry is None:
         registry = UDFRegistry.get_instance()
+    boundary = find_mixed_window_boundary(node, registry)
+    if boundary is not None:
+        raise CompileError(
+            "Mixed window domains require a multi-stage plan: "
+            f"{boundary.outer_call} -> {boundary.inner_call}. "
+            "Use CodeStr.sql() for automatic lowering."
+        )
     return _compile(node, registry, dims, ts_over, cs_over).alias(node.alias)
 
 

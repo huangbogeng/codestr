@@ -195,6 +195,14 @@ class TestCheckExpr:
             "expr": "clip(abs(close), lower_bound=0)",
         }
 
+    def test_mixed_window_is_structurally_valid(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        result = cs.check_expr("ts_mean(cs_moderate(close), 60)")
+
+        assert result["valid"] is True
+        assert result["reasons"] == []
+
 
 class TestClearCache:
     def test_clear_cache_resets_state(self, sample_df):

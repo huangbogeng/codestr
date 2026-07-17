@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 from codestr.compiler import compile as ast_compile
+from codestr.errors import CompileError
 from codestr.parser import parse
 from codestr.syntax import Call, Column, Literal
 
@@ -111,8 +112,6 @@ class TestCompileCall:
 
 class TestCompileErrors:
     def test_unknown_function(self):
-        from codestr.errors import CompileError
-
         node = Call(fn_name="nonexistent_fn", args=(Column("x"),))
         with pytest.raises(CompileError, match="Unknown function"):
             ast_compile(node)
@@ -120,3 +119,32 @@ class TestCompileErrors:
     def test_wrong_node_type(self):
         with pytest.raises(TypeError):
             ast_compile(None)  # type: ignore
+
+
+class TestMixedWindowCompile:
+    @pytest.mark.parametrize(
+        ("source", "path"),
+        [
+            ("ts_mean(cs_moderate(x), 60)", "ts_mean -> cs_moderate"),
+            ("cs_mean(ts_mean(x, 60))", "cs_mean -> ts_mean"),
+        ],
+    )
+    def test_pure_compile_rejects_mixed_window_domains(self, source, path):
+        with pytest.raises(CompileError, match=path):
+            ast_compile(parse(source))
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "ts_mean(ts_mean(x, 2, min_samples=1), 2, min_samples=1)",
+            "cs_rank(cs_moderate(x))",
+        ],
+    )
+    def test_pure_compile_keeps_same_domain_nesting(self, source):
+        assert isinstance(ast_compile(parse(source)), pl.Expr)
+
+    def test_unknown_function_remains_the_primary_error(self):
+        source = "ts_mean(not_registered(cs_moderate(x)), 60)"
+
+        with pytest.raises(CompileError, match="Unknown function: not_registered"):
+            ast_compile(parse(source))
