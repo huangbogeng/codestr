@@ -42,6 +42,7 @@ class CodeStr:
     - ``_expr_cache`` : persistent cross-query cache (ExprNode → alias).
     - ``_cur_expr_cache`` : per-query cache, merged into ``_expr_cache`` after
       a successful eager ``sql()``.
+    - ``_internal_columns`` : generated planner columns retained in ``_data_``.
     """
 
     def __init__(
@@ -81,6 +82,7 @@ class CodeStr:
         self.failed: list = []
         self._expr_cache: dict = {}
         self._cur_expr_cache: dict = {}
+        self._internal_columns: set[str] = set()
 
         self.data: pl.DataFrame | None = None
         self.index: tuple[str, str] = index
@@ -252,6 +254,7 @@ class CodeStr:
 
         data_saved = self._data_
         cache_saved = dict(self._cur_expr_cache)
+        internal_columns_saved = set(self._internal_columns)
 
         try:
             node = _parse(expr)
@@ -278,6 +281,7 @@ class CodeStr:
                 node,
                 registry,
                 existing_columns=current_cols,
+                reusable_columns=self._internal_columns,
             )
 
             if plan.is_single_stage:
@@ -299,13 +303,17 @@ class CodeStr:
                         cs_over=self._cs_over,
                     )
                     self._data_ = self._data_.with_columns(expr_pl.alias(step.output_name))
+                    if step.internal:
+                        self._internal_columns.add(step.output_name)
 
+            self._data_.collect_schema()
             self._cur_expr_cache[node] = alias
             return pl.col(alias), alias
 
         except Exception as e:
             self._data_ = data_saved
             self._cur_expr_cache = cache_saved
+            self._internal_columns = internal_columns_saved
             raise CompileError(message=f"[表达式]: {expr}\n[编译器外层]\n{e}") from e
 
     def sql(
@@ -337,6 +345,9 @@ class CodeStr:
 
         # Snapshot _data_ so we can roll back on lazy-return or failure
         _data_saved = self._data_
+        _expr_cache_saved = dict(self._expr_cache)
+        _internal_columns_saved = set(self._internal_columns)
+        _last_query_cache_saved = self._last_query_cache
 
         if self._last_query_cache is not None:
             if self.data is None:
@@ -366,25 +377,28 @@ class CodeStr:
             result = self._data_.select(*self.index, *exprs_select)
             self._data_ = _data_saved
             self._cur_expr_cache = {}
+            self._internal_columns = _internal_columns_saved
             return result
 
-        current_cols = set(self._data_.collect_schema().names())
-        new_expr_cache = dict()
         try:
-            self._last_query_cache = self._data_.select(*self.index, *exprs_select).collect()
-            self._expr_cache.update(self._cur_expr_cache)
-            for k, v in self._expr_cache.items():
-                if v in current_cols:
-                    new_expr_cache[k] = v
-            self._expr_cache = new_expr_cache
+            current_cols = set(self._data_.collect_schema().names())
+            result = self._data_.select(*self.index, *exprs_select).collect()
 
-            return self._last_query_cache
+            updated_cache = {
+                **self._expr_cache,
+                **self._cur_expr_cache,
+            }
+            self._expr_cache = {
+                node: alias for node, alias in updated_cache.items() if alias in current_cols
+            }
+            self._last_query_cache = result
+            return result
         except Exception as e:
-            for k, v in self._expr_cache.items():
-                if v in current_cols:
-                    new_expr_cache[k] = v
-            self._expr_cache = new_expr_cache
-            self._data_ = _data_saved  # roll back failed with_columns
+            self._data_ = _data_saved
+            self._expr_cache = _expr_cache_saved
+            self._cur_expr_cache = {}
+            self._internal_columns = _internal_columns_saved
+            self._last_query_cache = _last_query_cache_saved
             raise PolarsError(message=f"LazyFrame.collect() 阶段出错\n{e}") from e
 
     def clear_cache(self):
@@ -392,4 +406,5 @@ class CodeStr:
         self._data_ = None
         self._expr_cache = {}
         self._cur_expr_cache = {}
+        self._internal_columns = set()
         self._last_query_cache = None

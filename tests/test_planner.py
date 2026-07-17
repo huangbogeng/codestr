@@ -128,6 +128,15 @@ class TestExecutionPlan:
 
         assert second.steps[0].output_name == f"{occupied}_1"
 
+        reusable = build_execution_plan(
+            node,
+            registry,
+            existing_columns={occupied},
+            reusable_columns={occupied},
+        )
+
+        assert reusable.steps[0].output_name == occupied
+
     def test_internal_names_are_stable_and_preserve_literal_type(self, registry):
         int_node = parse("ts_mean(cs_moderate(x + 1), 2, min_samples=1)")
         float_node = parse("ts_mean(cs_moderate(x + 1.0), 2, min_samples=1)")

@@ -124,9 +124,11 @@ class _LoweringContext:
         self,
         registry: UDFRegistry,
         existing_columns: Collection[str],
+        reusable_columns: Collection[str],
     ):
         self.registry = registry
         self.used_names = set(existing_columns)
+        self.reusable_names = set(reusable_columns)
         self.steps: list[PlanStep] = []
         self.extracted: dict[ExprNode, str] = {}
 
@@ -135,6 +137,8 @@ class _LoweringContext:
         candidate = base
         suffix = 1
         while candidate in self.used_names:
+            if candidate in self.reusable_names:
+                return candidate
             candidate = f"{base}_{suffix}"
             suffix += 1
         self.used_names.add(candidate)
@@ -220,8 +224,13 @@ def build_execution_plan(
     node: ExprNode,
     registry: UDFRegistry,
     existing_columns: Collection[str] = (),
+    reusable_columns: Collection[str] = (),
 ) -> ExecutionPlan:
-    context = _LoweringContext(registry, existing_columns)
+    context = _LoweringContext(
+        registry,
+        existing_columns,
+        reusable_columns,
+    )
     lowered = context.lower(node)
     steps = (
         *context.steps,

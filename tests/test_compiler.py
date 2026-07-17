@@ -148,3 +148,24 @@ class TestMixedWindowCompile:
 
         with pytest.raises(CompileError, match="Unknown function: not_registered"):
             ast_compile(parse(source))
+
+    @pytest.mark.parametrize(
+        ("source", "error"),
+        [
+            (
+                "not_registered(x) + ts_mean(cs_moderate(y), 2)",
+                "Unknown function: not_registered",
+            ),
+            (
+                "ts_mean(x, 2, min_samples=1.0) + ts_mean(cs_moderate(y), 2)",
+                "min_samples must be a positive integer",
+            ),
+        ],
+    )
+    def test_existing_compile_errors_precede_mixed_window_guard(
+        self,
+        source,
+        error,
+    ):
+        with pytest.raises(CompileError, match=error):
+            ast_compile(parse(source))

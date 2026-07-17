@@ -42,6 +42,7 @@ def compile(
     """
     if registry is None:
         registry = UDFRegistry.get_instance()
+    compiled = _compile(node, registry, dims, ts_over, cs_over)
     boundary = find_mixed_window_boundary(node, registry)
     if boundary is not None:
         raise CompileError(
@@ -49,7 +50,7 @@ def compile(
             f"{boundary.outer_call} -> {boundary.inner_call}. "
             "Use CodeStr.sql() for automatic lowering."
         )
-    return _compile(node, registry, dims, ts_over, cs_over).alias(node.alias)
+    return compiled.alias(node.alias)
 
 
 def _resolve(

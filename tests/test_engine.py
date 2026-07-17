@@ -4,7 +4,7 @@ import polars as pl
 import pytest
 
 from codestr.engine import CodeStr
-from codestr.errors import CompileError
+from codestr.errors import CompileError, PolarsError
 from codestr.udf.registry import UDFMeta, UDFRegistry
 
 
@@ -293,6 +293,9 @@ class TestSQLInteractiveMode:
     def test_mixed_window_cover_recomputes_internal_stages(self, mixed_window_df):
         cs = CodeStr(mixed_window_df, align=False)
         first = cs.sql("ts_mean(cs_moderate(x), 2, min_samples=1) as factor")
+        initial_internal = {
+            name for name in cs._data_.collect_schema().names() if name.startswith("__codestr_")
+        }
 
         cs._data_ = cs._data_.with_columns((pl.col("x") * 2).alias("x"))
         second = cs.sql(
@@ -304,6 +307,10 @@ class TestSQLInteractiveMode:
         assert second["factor"].fill_null(0).sum() == pytest.approx(
             2 * first["factor"].fill_null(0).sum()
         )
+        current_internal = {
+            name for name in cs._data_.collect_schema().names() if name.startswith("__codestr_")
+        }
+        assert current_internal == initial_internal
 
     def test_failed_mixed_plan_does_not_leak_internal_columns(self, mixed_window_df):
         cs = CodeStr(mixed_window_df, align=False)
@@ -330,6 +337,57 @@ class TestSQLInteractiveMode:
         assert set(cs._data_.collect_schema().names()) == before
         assert not any(name.startswith("__codestr_") for name in cs._data_.collect_schema().names())
         assert "invalid" not in result.columns
+
+    def test_missing_column_mixed_plan_rolls_back_and_allows_later_query(
+        self,
+        mixed_window_df,
+    ):
+        cs = CodeStr(mixed_window_df, align=False)
+        before = set(cs.data.columns)
+
+        result = cs.sql("ts_mean(cs_moderate(missing), 2, min_samples=1) as invalid")
+
+        assert len(cs.failed) == 1
+        assert set(cs._data_.collect_schema().names()) == before
+        assert cs._cur_expr_cache == {}
+        assert "invalid" not in result.columns
+
+        valid = cs.sql("x + 1 as valid")
+
+        assert cs.failed == []
+        assert "valid" in valid.columns
+
+    def test_collect_failure_restores_query_state(self, mixed_window_df):
+        cs = CodeStr(mixed_window_df, align=False)
+
+        def raise_during_collect(value):
+            raise ValueError("collect failure")
+
+        def fail_during_collect(
+            expr,
+            partition_by=None,
+            order_by=None,
+        ):
+            return expr.map_elements(
+                raise_during_collect,
+                return_dtype=pl.Float64,
+            )
+
+        UDFRegistry.get_instance().register(
+            UDFMeta(
+                name="ts_fail_during_collect",
+                fn=fail_during_collect,
+                category="ts",
+            )
+        )
+
+        with pytest.raises(PolarsError, match="collect failure"):
+            cs.sql("ts_fail_during_collect(cs_moderate(x)) as invalid")
+
+        assert cs._data_ is None
+        assert cs._expr_cache == {}
+        assert cs._cur_expr_cache == {}
+        assert cs._internal_columns == set()
 
 
 class TestCheckExpr:
