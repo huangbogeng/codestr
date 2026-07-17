@@ -274,33 +274,35 @@ cs.sql("cs_midby(factor, sector, cap_group) as group_median")
 
 > 编译器自动注入窗口配置：`over(partition_by=asset_cols, order_by=datetime_cols)`
 
-滚动、滞后与差分算子的通用签名为 `(expr, windows)`，其中 `windows` 是整数，表示回溯窗口大小。`ts_ema` 的签名为 `(expr, span)`，`span` 必须是正整数。
+滚动统计的通用签名为 `(expr, windows, min_samples=None)`，其中 `windows` 是整数，表示回溯窗口大小；`min_samples` 必须是正整数，省略时沿用 Polars 默认值 `None`（需要完整窗口）。`ts_ema` 的签名为 `(expr, span, min_samples=1)`，`span` 和 `min_samples` 都必须是正整数。滞后与差分算子仍使用 `(expr, windows)`，不接收 `min_samples`。
 
 ### 滚动统计
 
 | 算子 | 说明 | 底层实现 |
 |------|------|------|
-| `ts_mean` | 滚动均值 | `rolling_mean(windows)` |
-| `ts_ema` | 递归指数移动平均 | `ewm_mean(span=span, adjust=False, min_samples=1)` |
-| `ts_sum` | 滚动求和 | `rolling_sum(windows)` |
-| `ts_std` | 滚动标准差 | `rolling_std(windows)` |
-| `ts_var` | 滚动方差 | `rolling_var(windows)` |
-| `ts_skew` | 滚动偏度 | `rolling_skew(windows)` |
-| `ts_kurt` | 滚动峰度 | `rolling_kurtosis(windows)` |
-| `ts_max` | 滚动最大值 | `rolling_max(windows)` |
-| `ts_min` | 滚动最小值 | `rolling_min(windows)` |
-| `ts_mid` | 滚动中位数 | `rolling_median(windows)` |
-| `ts_mad` | 滚动 MAD | `median(|x - rolling_median(x)|) × 1.4826` |
+| `ts_mean` | 滚动均值 | `rolling_mean(windows, min_samples=min_samples)` |
+| `ts_ema` | 递归指数移动平均 | `ewm_mean(span=span, adjust=False, min_samples=min_samples)` |
+| `ts_sum` | 滚动求和 | `rolling_sum(windows, min_samples=min_samples)` |
+| `ts_std` | 滚动标准差 | `rolling_std(windows, min_samples=min_samples)` |
+| `ts_var` | 滚动方差 | `rolling_var(windows, min_samples=min_samples)` |
+| `ts_skew` | 滚动偏度 | `rolling_skew(windows, min_samples=min_samples)` |
+| `ts_kurt` | 滚动峰度 | `rolling_kurtosis(windows, min_samples=min_samples)` |
+| `ts_max` | 滚动最大值 | `rolling_max(windows, min_samples=min_samples)` |
+| `ts_min` | 滚动最小值 | `rolling_min(windows, min_samples=min_samples)` |
+| `ts_mid` | 滚动中位数 | `rolling_median(windows, min_samples=min_samples)` |
+| `ts_mad` | 滚动 MAD | 内外两层 `rolling_median` 使用相同的 `min_samples` |
 
-> `ts_mad` 乘以常数 1.4826 使其在正态分布下与标准差一致（一致性缩放因子）。
+> `ts_mad` 计算 `median(|x - rolling_median(x)|) × 1.4826`。常数 1.4826 使其在正态分布下与标准差一致，内外两层滚动中位数共享同一个 `min_samples`。
 
 示例：
 ```python
 cs.sql("ts_mean(close, 5) as ma5")
+cs.sql("ts_mean(close, 20, min_samples=5) as ma20_partial")
 cs.sql("ts_ema(close, 10) as ema10")
+cs.sql("ts_ema(close, 10, min_samples=3) as ema10_warmup")
 cs.sql("ts_std(close, 20) as vol20")
 cs.sql("ts_max(high, 20) as hh20")
-cs.sql("ts_mad(close, 20) as mad20")
+cs.sql("ts_mad(close, 20, min_samples=5) as mad20")
 ```
 
 ### 滞后与差分

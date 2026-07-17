@@ -108,6 +108,13 @@ cs.sql("ts_ewm(close, 10) as ewm10")
 
 **时序算子** (`ts_udf`)：`ts_mean`, `ts_ema`, `ts_sum`, `ts_std`, `ts_var`, `ts_skew`, `ts_kurt`, `ts_max`, `ts_min`, `ts_mid`, `ts_delay`, `ts_delta`, `ts_mad` 等
 
+滚动统计与 `ts_ema` 支持关键字参数 `min_samples`。滚动统计省略该参数时沿用 Polars 默认值 `None`（需要完整窗口），`ts_ema` 则沿用 Polars 默认值 `1`：
+
+```python
+cs.sql("ts_mean(close, 20, min_samples=5) as ma20")
+cs.sql("ts_ema(close, 10, min_samples=3) as ema10")
+```
+
 ## 项目结构
 
 ```
