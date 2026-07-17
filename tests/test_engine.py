@@ -152,6 +152,40 @@ class TestSQLInteractiveMode:
         # cover=True should recalculate
         assert "offset" in result.columns
 
+    def test_sql_lowers_ts_over_cs(self, mixed_window_df):
+        actual_engine = CodeStr(mixed_window_df, align=False)
+        actual = actual_engine.sql("ts_mean(cs_moderate(x), 60) as factor").sort(
+            ["asset", "datetime"]
+        )
+
+        expected_engine = CodeStr(mixed_window_df, align=False)
+        expected_engine.sql("cs_moderate(x) as moderate")
+        expected = expected_engine.sql("ts_mean(moderate, 60) as factor").sort(
+            ["asset", "datetime"]
+        )
+
+        assert actual_engine.failed == []
+        assert actual["factor"].equals(expected["factor"])
+        assert actual.filter(pl.col("asset") == "A")["factor"].tail(3).to_list() == [
+            33.5,
+            34.5,
+            35.5,
+        ]
+        assert actual.columns == ["datetime", "asset", "factor"]
+
+    def test_sql_lowers_cs_over_ts(self, mixed_window_df):
+        actual_engine = CodeStr(mixed_window_df, align=False)
+        actual = actual_engine.sql("cs_mean(ts_mean(x, 2, min_samples=1)) as factor").sort(
+            ["asset", "datetime"]
+        )
+
+        expected_engine = CodeStr(mixed_window_df, align=False)
+        expected_engine.sql("ts_mean(x, 2, min_samples=1) as rolling")
+        expected = expected_engine.sql("cs_mean(rolling) as factor").sort(["asset", "datetime"])
+
+        assert actual_engine.failed == []
+        assert actual["factor"].equals(expected["factor"])
+
 
 class TestCheckExpr:
     def test_valid_expr(self, sample_df):

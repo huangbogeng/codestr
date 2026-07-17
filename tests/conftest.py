@@ -45,3 +45,17 @@ def sample_df() -> pl.DataFrame:
             "low": [98.0, 195.0, 99.0, 194.0, 100.0, 198.0, 101.0, 200.0],
         }
     )
+
+
+@pytest.fixture
+def mixed_window_df() -> pl.DataFrame:
+    rows = [
+        (day, asset, day * scale)
+        for day in range(1, 66)
+        for asset, scale in (("A", 1.0), ("B", 2.0), ("C", 3.0))
+    ]
+    return pl.DataFrame(
+        rows,
+        schema=("datetime", "asset", "x"),
+        orient="row",
+    )

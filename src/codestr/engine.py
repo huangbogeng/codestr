@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 from codestr.compiler import compile as _pure_compile
 from codestr.errors import CompileError, FailError, PolarsError
 from codestr.parser import parse as _parse
+from codestr.planner import build_execution_plan
 from codestr.syntax import (
     Call,
     KeywordArg,
@@ -245,38 +246,66 @@ class CodeStr:
             raise CompileError(f"Pure compilation failed for {expr}: {e}") from e
 
     def _compile_expr(self, expr: str, cover: bool):
-        """str表达式 -> polars 表达式"""
+        """Parse, plan, and append one expression to the current lazy graph."""
         if self._data_ is None:
             self._data_ = self.data.lazy()
+
+        data_saved = self._data_
+        cache_saved = dict(self._cur_expr_cache)
 
         try:
             node = _parse(expr)
             alias = node.alias
-            current_cols = set(self.cache_columns)
+            current_cols = set(self._data_.collect_schema().names())
 
             if alias in current_cols and not cover:
                 return pl.col(alias), alias
             if node in self._expr_cache and not cover:
-                expr_pl = pl.col(self._expr_cache[node]).alias(alias)
-                self._data_ = self._data_.with_columns(expr_pl)
-                return pl.col(alias), alias
+                cached_alias = self._expr_cache[node]
+                if cached_alias in current_cols:
+                    expr_pl = pl.col(cached_alias).alias(alias)
+                    self._data_ = self._data_.with_columns(expr_pl)
+                    return pl.col(alias), alias
             if node in self._cur_expr_cache and not cover:
-                expr_pl = pl.col(self._cur_expr_cache[node]).alias(alias)
-                self._data_ = self._data_.with_columns(expr_pl)
-                return pl.col(alias), alias
+                cached_alias = self._cur_expr_cache[node]
+                if cached_alias in current_cols:
+                    expr_pl = pl.col(cached_alias).alias(alias)
+                    self._data_ = self._data_.with_columns(expr_pl)
+                    return pl.col(alias), alias
 
-            expr_pl = _pure_compile(
+            registry = UDFRegistry.get_instance()
+            plan = build_execution_plan(
                 node,
-                registry=UDFRegistry.get_instance(),
-                dims=getattr(self, "dims", None),
-                ts_over=self._ts_over,
-                cs_over=self._cs_over,
+                registry,
+                existing_columns=current_cols,
             )
-            self._data_ = self._data_.with_columns(expr_pl.alias(alias))
+
+            if plan.is_single_stage:
+                expr_pl = _pure_compile(
+                    node,
+                    registry=registry,
+                    dims=getattr(self, "dims", None),
+                    ts_over=self._ts_over,
+                    cs_over=self._cs_over,
+                )
+                self._data_ = self._data_.with_columns(expr_pl.alias(alias))
+            else:
+                for step in plan.steps:
+                    expr_pl = _pure_compile(
+                        step.node,
+                        registry=registry,
+                        dims=getattr(self, "dims", None),
+                        ts_over=self._ts_over,
+                        cs_over=self._cs_over,
+                    )
+                    self._data_ = self._data_.with_columns(expr_pl.alias(step.output_name))
+
             self._cur_expr_cache[node] = alias
             return pl.col(alias), alias
 
         except Exception as e:
+            self._data_ = data_saved
+            self._cur_expr_cache = cache_saved
             raise CompileError(message=f"[表达式]: {expr}\n[编译器外层]\n{e}") from e
 
     def sql(
