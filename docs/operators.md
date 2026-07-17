@@ -375,6 +375,25 @@ cs = CodeStr(df,
 
 CS 与 TS 的 `partition_by` / `order_by` **刚好交换**，分别实现"按时间分组，沿实体统计"（CS）和"按实体分组，沿时间统计"（TS）。
 
+### 混合窗口规划
+
+TS 与 CS 使用不同分组轴，不能安全地嵌套成一个 Polars window
+expression。`CodeStr.sql()` 会检测窗口祖先链上的域变化，并生成多个
+连续 `with_columns` 阶段：
+
+```text
+ts_mean(cs_moderate(x), 60)
+
+stage 1: internal = cs_moderate(x)
+stage 2: result = ts_mean(internal, 60)
+```
+
+该过程保持 lazy，不会在阶段间调用 `collect()`。同一次 `sql()` 中，
+后续表达式也可以引用前一条表达式创建的别名。
+
+`CodeStr.compile()` 仍返回单个 `pl.Expr`，对混合窗口抛出
+`CompileError`。同域嵌套和并列的 TS/CS 表达式继续正常编译。
+
 ---
 
 ## 自定义算子

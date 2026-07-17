@@ -84,6 +84,23 @@ cs = CodeStr(df,
 | **TS (时序)** | `over(partition_by=partition_by, order_by=order_by)` |
 | **CS (截面)** | `over(partition_by=order_by, order_by=partition_by)` |
 
+### 混合窗口
+
+`CodeStr.sql()` 会自动把 TS/CS 混合窗口拆成连续的 lazy projection：
+
+```python
+cs.sql(
+    "close * 2 as scaled",
+    "ts_mean(cs_moderate(scaled), 60) as factor",
+)
+```
+
+其语义等价于先生成 `cs_moderate(scaled)` 中间列，再沿资产时间轴
+计算 `ts_mean`。中间列不会出现在返回结果中。
+
+纯 `cs.compile()` 只能返回一个 `pl.Expr`，因此会明确拒绝需要多阶段
+执行的 TS/CS 混合窗口。TS→TS 和 CS→CS 同域嵌套不受影响。
+
 ## 自定义算子
 
 ```python
