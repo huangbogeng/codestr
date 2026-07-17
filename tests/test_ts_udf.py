@@ -8,7 +8,7 @@ from codestr.compiler import compile as ast_compile
 from codestr.errors import CompileError
 from codestr.parser import parse
 from codestr.syntax import Call, Column, Literal
-from codestr.udf.ts_udf import ts_mean
+from codestr.udf.ts_udf import ts_ema, ts_mean
 
 
 @pytest.fixture
@@ -119,12 +119,71 @@ class TestTSEma:
 
         assert actual.to_list() == ts_df["close"].to_list()
 
+    def test_explicit_min_samples(self):
+        df = pl.DataFrame(
+            {
+                "datetime": [1, 2, 3, 4],
+                "asset": ["A", "A", "A", "A"],
+                "value": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
+        node = parse("ts_ema(value, 2, min_samples=3)")
+
+        actual = df.select(ast_compile(node))[node.alias]
+        expected = df.select(
+            pl.col("value")
+            .ewm_mean(span=2, adjust=False, min_samples=3)
+            .over(partition_by=["asset"], order_by=["datetime"])
+            .alias("expected")
+        )["expected"]
+
+        assert_series_equal(actual.rename("expected"), expected)
+        assert actual.to_list()[:2] == [None, None]
+
     @pytest.mark.parametrize("span", [0, -1, 2.5, True])
     def test_rejects_invalid_span(self, span):
         node = Call("ts_ema", (Column("close"), Literal(span)))
 
         with pytest.raises(CompileError, match="positive integer"):
             ast_compile(node)
+
+    @pytest.mark.parametrize("min_samples", [0, -1, 1.5, True])
+    def test_rejects_invalid_min_samples(self, min_samples):
+        with pytest.raises(ValueError, match="min_samples must be a positive integer"):
+            ts_ema(pl.col("value"), 2, min_samples=min_samples)
+
+
+class TestTSMad:
+    @pytest.mark.parametrize("min_samples", [None, 1])
+    def test_min_samples_applies_to_both_stages(self, unordered_ts_df, min_samples):
+        if min_samples is None:
+            source = "ts_mad(value, 3)"
+            rolling_kwargs = {}
+        else:
+            source = f"ts_mad(value, 3, min_samples={min_samples})"
+            rolling_kwargs = {"min_samples": min_samples}
+
+        node = parse(source)
+        actual = unordered_ts_df.select(ast_compile(node))[node.alias]
+        inner = (
+            pl.col("value")
+            .rolling_median(3, **rolling_kwargs)
+            .over(
+                partition_by=["asset"],
+                order_by=["datetime"],
+            )
+        )
+        expected = unordered_ts_df.select(
+            (
+                1.4826
+                * (pl.col("value") - inner)
+                .abs()
+                .rolling_median(3, **rolling_kwargs)
+                .over(partition_by=["asset"], order_by=["datetime"])
+            ).alias("expected")
+        )["expected"]
+
+        assert_series_equal(actual.rename("expected"), expected)
 
 
 class TestTSMax:

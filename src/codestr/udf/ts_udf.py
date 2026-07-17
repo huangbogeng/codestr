@@ -84,11 +84,19 @@ def ts_mean(
 
 
 @udf(category="ts")
-def ts_ema(expr: pl.Expr, span: int, partition_by=None, order_by=None):
+def ts_ema(
+    expr: pl.Expr,
+    span: int,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples: int = 1,
+):
     """Recursive exponential moving average over each ordered entity series."""
     if type(span) is not int or span < 1:
         raise ValueError("span must be a positive integer")
-    return expr.ewm_mean(span=span, adjust=False, min_samples=1).over(
+    min_samples = _validate_min_samples(min_samples)
+    return expr.ewm_mean(span=span, adjust=False, min_samples=min_samples).over(
         partition_by=partition_by,
         order_by=order_by,
     )
@@ -191,16 +199,31 @@ def ts_mid(
 
 
 @udf(category="ts")
-def ts_mad(expr: pl.Expr, windows, partition_by=None, order_by=None):
+def ts_mad(
+    expr: pl.Expr,
+    windows,
+    partition_by=None,
+    order_by=None,
+    *,
+    min_samples=None,
+):
     """Median Absolute Deviation over a rolling window.
 
     MAD = 1.4826 * median(|x - rolling_median(x)|)
     The constant 1.4826 scales MAD to be consistent with standard deviation
     for normally distributed data.
     """
+    min_samples = _validate_min_samples(min_samples)
     return 1.4826 * (
-        expr - expr.rolling_median(windows).over(partition_by=partition_by, order_by=order_by)
-    ).abs().rolling_median(windows).over(partition_by=partition_by, order_by=order_by)
+        expr
+        - expr.rolling_median(windows, min_samples=min_samples).over(
+            partition_by=partition_by,
+            order_by=order_by,
+        )
+    ).abs().rolling_median(windows, min_samples=min_samples).over(
+        partition_by=partition_by,
+        order_by=order_by,
+    )
 
 
 @udf(category="ts")
