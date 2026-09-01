@@ -441,6 +441,96 @@ class TestCheckExpr:
         assert result["reasons"] == []
 
 
+class TestValidateExpr:
+    def test_validates_expression_against_current_schema(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        assert cs.validate_expr("ts_mean(close, 2) as mean_close") == [
+            {
+                "expr": "ts_mean(close, 2) as mean_close",
+                "valid": True,
+                "stage": "schema",
+                "error_type": None,
+                "message": None,
+            }
+        ]
+
+    def test_reports_structural_compile_and_schema_failures(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        structural = cs.validate_expr("")[0]
+        compile_failure = cs.validate_expr("sin(1.0) as factor")[0]
+        schema_failure = cs.validate_expr("missing + 1 as factor")[0]
+
+        assert structural["valid"] is False
+        assert structural["stage"] == "structural"
+        assert structural["error_type"] == "ParseError"
+        assert structural["message"]
+        assert compile_failure["valid"] is False
+        assert compile_failure["stage"] == "compile"
+        assert compile_failure["error_type"] == "CompileError"
+        assert "sin" in compile_failure["message"]
+        assert schema_failure["valid"] is False
+        assert schema_failure["stage"] == "schema"
+        assert schema_failure["error_type"] == "ColumnNotFoundError"
+        assert "missing" in schema_failure["message"]
+
+    def test_validates_mixed_window_through_planner(self, mixed_window_df):
+        cs = CodeStr(mixed_window_df, align=False)
+
+        result = cs.validate_expr("ts_mean(cs_moderate(x), 2, min_samples=1) as factor")
+
+        assert result[0]["valid"] is True
+        assert result[0]["stage"] == "schema"
+
+    def test_batch_expressions_are_independent(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        results = cs.validate_expr(
+            "close * 2 as scaled",
+            "scaled + 1 as shifted",
+        )
+
+        assert results[0]["valid"] is True
+        assert results[1]["valid"] is False
+        assert results[1]["stage"] == "schema"
+
+    def test_does_not_collect_or_mutate_engine_state(self, sample_df):
+        cs = CodeStr(sample_df)
+        cs.sql("close + 1 as cached")
+
+        def raise_during_collect(value):
+            raise ValueError("must not collect")
+
+        def lazy_only(expr):
+            return expr.map_elements(
+                raise_during_collect,
+                return_dtype=pl.Float64,
+            )
+
+        cs.register_udf(lazy_only)
+        state = {
+            "data": cs.data,
+            "lazy": cs._data_,
+            "expr_cache": dict(cs._expr_cache),
+            "cur_expr_cache": dict(cs._cur_expr_cache),
+            "internal_columns": set(cs._internal_columns),
+            "last_query_cache": cs._last_query_cache,
+            "failed": list(cs.failed),
+        }
+
+        result = cs.validate_expr("lazy_only(close) as validated")
+
+        assert result[0]["valid"] is True
+        assert cs.data is state["data"]
+        assert cs._data_ is state["lazy"]
+        assert cs._expr_cache == state["expr_cache"]
+        assert cs._cur_expr_cache == state["cur_expr_cache"]
+        assert cs._internal_columns == state["internal_columns"]
+        assert cs._last_query_cache is state["last_query_cache"]
+        assert cs.failed == state["failed"]
+
+
 class TestClearCache:
     def test_clear_cache_resets_state(self, sample_df):
         cs = CodeStr(sample_df)

@@ -195,6 +195,124 @@ class CodeStr:
         result["valid"] = len(result["reasons"]) == 0
         return result
 
+    def validate_expr(self, *exprs: str) -> list[dict[str, object]]:
+        """Dry-compile expressions against the current Polars schema.
+
+        Unlike :meth:`check_expr`, this resolves UDFs, planner stages, and
+        column/type compatibility. It never collects data or mutates engine
+        state. Batch expressions are validated independently.
+
+        Returns:
+            One result per input expression. ``stage`` is ``structural``,
+            ``compile``, or ``schema``; successful validation reaches the
+            ``schema`` stage with no error details.
+        """
+        base = self._data_ if self._data_ is not None else self.data.lazy()
+        registry = UDFRegistry.get_instance()
+        results = []
+
+        for expr in exprs:
+            try:
+                node = _parse(expr)
+            except Exception as error:
+                results.append(
+                    {
+                        "expr": expr,
+                        "valid": False,
+                        "stage": "structural",
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    }
+                )
+                continue
+
+            structural = self.check_expr(expr)
+            if not structural["valid"]:
+                results.append(
+                    {
+                        "expr": expr,
+                        "valid": False,
+                        "stage": "structural",
+                        "error_type": "StructuralError",
+                        "message": "; ".join(structural["reasons"]),
+                    }
+                )
+                continue
+
+            try:
+                current_columns = base.collect_schema().names()
+            except Exception as error:
+                results.append(
+                    {
+                        "expr": expr,
+                        "valid": False,
+                        "stage": "schema",
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    }
+                )
+                continue
+
+            try:
+                plan = build_execution_plan(
+                    node,
+                    registry,
+                    existing_columns=current_columns,
+                )
+                compiled_steps = [
+                    (
+                        _pure_compile(
+                            step.node,
+                            registry=registry,
+                            dims=getattr(self, "dims", None),
+                            ts_over=self._ts_over,
+                            cs_over=self._cs_over,
+                        ),
+                        step.output_name,
+                    )
+                    for step in plan.steps
+                ]
+            except Exception as error:
+                results.append(
+                    {
+                        "expr": expr,
+                        "valid": False,
+                        "stage": "compile",
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    }
+                )
+                continue
+
+            try:
+                candidate = base
+                for compiled, output_name in compiled_steps:
+                    candidate = candidate.with_columns(compiled.alias(output_name))
+                    candidate.collect_schema()
+            except Exception as error:
+                results.append(
+                    {
+                        "expr": expr,
+                        "valid": False,
+                        "stage": "schema",
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    }
+                )
+                continue
+
+            results.append(
+                {
+                    "expr": expr,
+                    "valid": True,
+                    "stage": "schema",
+                    "error_type": None,
+                    "message": None,
+                }
+            )
+
+        return results
+
     def _check_redundant(self, node: Call, reasons: list[str]):
         if not isinstance(node, Call):
             return

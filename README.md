@@ -40,12 +40,13 @@ result = cs.sql(
 print(result)
 ```
 
-## 两种 API 模式
+## API 模式
 
 | 模式 | API | 行为 |
 |------|-----|------|
 | **纯编译** | `cs.compile(expr) -> pl.Expr` | 无副作用，返回 Polars 表达式 |
 | **交互式** | `cs.sql(expr, lazy=False) -> pl.DataFrame` | 有状态，自动缓存与复用 |
+| **静态验证** | `cs.validate_expr(*exprs) -> list[dict]` | 无副作用，按当前 schema 干编译 |
 
 ```python
 # 纯编译 — 表达式可被任意 DataFrame 消费
@@ -56,6 +57,24 @@ other_df.with_columns(expr)
 cs.sql("close + volume as total")
 cs.sql("ts_mean(total, 5) as total_ma5")  # 复用上一步的 total
 ```
+
+### 静态验证
+
+`validate_expr()` 复用 `sql()` 的 planner，在当前 LazyFrame schema 上解析
+UDF、列引用、类型兼容性和混合窗口，但只调用 `collect_schema()`，不会
+`collect()` 数据或修改引擎缓存：
+
+```python
+results = cs.validate_expr(
+    "sin(1.0) as invalid",
+    "ts_mean(cs_moderate(close), 5) as factor",
+)
+```
+
+每个结果包含 `expr`、`valid`、`stage`、`error_type` 和 `message`。
+失败阶段分为 `structural`、`compile` 和 `schema`。批量输入相互独立，
+后一条表达式不能引用同批前一条表达式新建的别名。依赖实际数据值、
+只在物化时出现的错误不属于该 API 的检查范围。
 
 ## 窗口配置
 
