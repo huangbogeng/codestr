@@ -89,7 +89,7 @@ class TestCSQcut:
         result = cs_df.select(expr)
 
         assert result.schema["cs_qcut(x, 2)"] == pl.Int32
-        assert result["cs_qcut(x, 2)"].to_list() == [0, 1, 0, 1, 1, 0]
+        assert result["cs_qcut(x, 2)"].to_list() == [1, 2, 1, 2, 2, 1]
 
 
 class TestCSMidby:

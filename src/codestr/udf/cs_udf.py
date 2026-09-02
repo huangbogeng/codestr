@@ -73,7 +73,7 @@ def cs_qcut(expr: pl.Expr, n_bins=10, partition_by=None, order_by=None):
     return (
         expr.qcut(n_bins, labels=[str(i) for i in range(1, n_bins + 1)], allow_duplicates=True)
         .over(partition_by=partition_by, order_by=order_by)
-        .cat.physical()
+        .cast(pl.String)
         .cast(pl.Int32)
     )
 
