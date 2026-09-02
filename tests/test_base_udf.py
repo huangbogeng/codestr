@@ -6,6 +6,7 @@ import pytest
 
 from codestr.compiler import compile as ast_compile
 from codestr.syntax import Call, Column, Literal
+from codestr.udf import base_udf
 
 
 def _eval_expr(node, df: pl.DataFrame) -> pl.DataFrame:
@@ -84,6 +85,75 @@ class TestUnaryMath:
         result = df.select(ast_compile(node))["between(x, 2, 8)"].to_list()
         assert result == [False, True, False]
 
+    @pytest.mark.parametrize(
+        ("name", "value", "expected"),
+        [
+            ("cbrt", 8.0, 2.0),
+            ("sinh", 0.0, 0.0),
+            ("arcsin", 0.0, 0.0),
+            ("arcsinh", 0.0, 0.0),
+            ("cosh", 0.0, 1.0),
+            ("arccos", 1.0, 0.0),
+            ("arccosh", 1.0, 0.0),
+            ("tan", 0.0, 0.0),
+            ("tanh", 0.0, 0.0),
+            ("arctan", 0.0, 0.0),
+            ("arctanh", 0.0, 0.0),
+            ("cot", np.pi / 4, 1.0),
+            ("degrees", np.pi, 180.0),
+            ("log1p", np.e - 1, 1.0),
+        ],
+    )
+    def test_remaining_unary_numeric_contracts(self, name, value, expected):
+        df = pl.DataFrame({"x": [value]})
+        result = df.select(ast_compile(Call(name, (Column("x"),))))
+
+        assert result.item() == pytest.approx(expected)
+
+    def test_not(self):
+        df = pl.DataFrame({"x": [True, False]})
+
+        result = df.select(ast_compile(Call("not_", (Column("x"),))))
+
+        assert result.to_series().to_list() == [False, True]
+
+    def test_entropy(self):
+        df = pl.DataFrame({"x": [0.25, 0.75]})
+
+        result = df.select(ast_compile(Call("entropy", (Column("x"),))))
+
+        assert result.item() == pytest.approx(0.5623351446)
+
+    def test_trunc_closed_and_open_bounds(self):
+        df = pl.DataFrame({"x": [0.0, 1.0, 2.0]})
+        closed = base_udf.trunc(pl.col("x"), 0, 2)
+        opened = base_udf.trunc(pl.col("x"), 0, 2, left_closed=False, right_closed=False)
+
+        result = df.select(closed.alias("closed"), opened.alias("opened"))
+
+        assert result["closed"].to_list() == [0.0, 1.0, 2.0]
+        assert result["opened"].to_list() == [None, 1.0, None]
+
+    def test_cast_valid_and_invalid_dtype(self):
+        df = pl.DataFrame({"x": [1.5]})
+
+        result = df.select(base_udf.cast(pl.col("x"), "int"))
+
+        assert result.schema["x"] == pl.Int64
+        with pytest.raises(ValueError, match="not a valid type"):
+            base_udf.cast(pl.col("x"), "date")
+
+    def test_concat_and_null_type(self):
+        df = pl.DataFrame({"a": [1], "b": [2]})
+
+        result = df.select(
+            base_udf.concat(pl.col("a"), pl.col("b")).alias("values"),
+            base_udf.null_type(pl.col("a")).alias("null"),
+        )
+
+        assert result["values"].to_list() == [[1, 2]]
+        assert result["null"].to_list() == [None]
+
 
 class TestBinaryMath:
     def test_add(self):
@@ -116,6 +186,23 @@ class TestBinaryMath:
         node = Call("eq", (Column("a"), Column("b")))
         assert df.select(ast_compile(node))["(a==b)"].to_list() == [True, False]
 
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("floordiv", [2, 2]),
+            ("mod", [1, 1]),
+            ("lt", [False, False]),
+            ("le", [False, False]),
+            ("ge", [True, True]),
+            ("neq", [True, True]),
+        ],
+    )
+    def test_remaining_binary_contracts(self, name, expected):
+        df = pl.DataFrame({"a": [5, 7], "b": [2, 3]})
+        node = Call(name, (Column("a"), Column("b")))
+
+        assert df.select(ast_compile(node)).to_series().to_list() == expected
+
 
 class TestHorizontalOps:
     def test_max(self):
@@ -137,6 +224,17 @@ class TestHorizontalOps:
         df = pl.DataFrame({"a": [1.0, 5.0], "b": [3.0, 3.0]})
         node = Call("mean", (Column("a"), Column("b")))
         assert df.select(ast_compile(node))["mean(a, b)"].to_list() == [2.0, 4.0]
+
+    def test_arg_max_and_arg_min(self):
+        df = pl.DataFrame({"a": [1.0, 5.0], "b": [3.0, 2.0]})
+
+        result = df.select(
+            ast_compile(Call("arg_max", (Column("a"), Column("b")))).alias("max"),
+            ast_compile(Call("arg_min", (Column("a"), Column("b")))).alias("min"),
+        )
+
+        assert result["max"].to_list() == [1, 0]
+        assert result["min"].to_list() == [0, 1]
 
 
 class TestTernary:

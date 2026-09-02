@@ -96,3 +96,41 @@ class TestCSMidby:
         expr = ast_compile(node)
         result = cs_df.select(expr)
         assert result.height == 6
+
+
+class TestRemainingCSOperators:
+    @pytest.mark.parametrize(
+        ("name", "expected_first"),
+        [
+            ("cs_ufit", 5.0),
+            ("cs_mid", 15.0),
+            ("cs_corr", 1.0),
+            ("cs_std", pytest.approx(7.0710678119)),
+            ("cs_var", 50.0),
+            ("cs_slope", 5.0),
+            ("cs_resid", 5.0),
+            ("cs_min", 10.0),
+            ("cs_peakmax", False),
+            ("cs_peakmin", False),
+        ],
+    )
+    def test_operator_values(self, cs_df, name, expected_first):
+        args = (
+            (Column("x"), Column("y"))
+            if name in {"cs_corr", "cs_slope", "cs_resid"}
+            else (Column("x"),)
+        )
+
+        result = cs_df.select(ast_compile(Call(name, args)))
+
+        assert result.item(0, 0) == expected_first
+
+    def test_cs_skew_executes_per_cross_section(self, cs_df):
+        result = cs_df.select(ast_compile(Call("cs_skew", (Column("x"),))))
+
+        assert result.height == cs_df.height
+
+    def test_cs_meanby_adds_grouping_columns(self, cs_df):
+        result = cs_df.select(ast_compile(Call("cs_meanby", (Column("x"), Column("asset")))))
+
+        assert result.to_series().to_list() == cs_df["x"].to_list()
