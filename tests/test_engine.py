@@ -20,6 +20,12 @@ class TestCodeStrInit:
         assert cs.data is None
         assert "close" in cs.cache_columns
 
+    def test_init_collects_lazy_input_in_eager_mode(self, sample_df):
+        cs = CodeStr(sample_df.lazy())
+
+        assert isinstance(cs.data, pl.DataFrame)
+        assert cs.data.height == sample_df.height
+
     def test_init_invalid_data_raises(self):
         with pytest.raises(AssertionError):
             CodeStr([1, 2, 3])  # type: ignore
@@ -82,6 +88,17 @@ class TestSQLInteractiveMode:
         )
         assert "total" in result.columns
         assert "spread" in result.columns
+
+    def test_same_query_reuses_expression_with_new_alias(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        result = cs.sql(
+            "close + 1 as first",
+            "close + 1 as second",
+        )
+
+        assert cs.failed == []
+        assert result["first"].equals(result["second"])
 
     def test_sql_caching_reuses_expr(self, sample_df):
         """Subsequent identical expressions should reuse cached columns."""
@@ -474,6 +491,26 @@ class TestValidateExpr:
         assert schema_failure["stage"] == "schema"
         assert schema_failure["error_type"] == "ColumnNotFoundError"
         assert "missing" in schema_failure["message"]
+
+    def test_reports_non_parse_structural_failure(self, sample_df):
+        cs = CodeStr(sample_df)
+
+        result = cs.validate_expr("close - close as invalid")[0]
+
+        assert result["valid"] is False
+        assert result["stage"] == "structural"
+        assert result["error_type"] == "StructuralError"
+        assert "redundant:sub" in result["message"]
+
+    def test_reports_invalid_base_lazy_schema(self):
+        invalid = pl.DataFrame({"x": [1.0]}).lazy().select("missing")
+        cs = CodeStr(invalid, pure_lazy=True)
+
+        result = cs.validate_expr("x + 1 as factor")[0]
+
+        assert result["valid"] is False
+        assert result["stage"] == "schema"
+        assert result["error_type"] == "ColumnNotFoundError"
 
     def test_validates_mixed_window_through_planner(self, mixed_window_df):
         cs = CodeStr(mixed_window_df, align=False)

@@ -33,3 +33,20 @@ jobs:
         run: |
           uv sync --extra test
           uv run pytest tests/ -v
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: uv sync --extra test
+      - name: Enforce branch coverage
+        run: |
+          uv run pytest tests/ \
+            --cov=src/codestr \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-fail-under=90
