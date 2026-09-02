@@ -87,7 +87,9 @@ class TestCSQcut:
         node = Call("cs_qcut", (Column("x"), Literal(2)))
         expr = ast_compile(node)
         result = cs_df.select(expr)
-        assert result.height == 6
+
+        assert result.schema["cs_qcut(x, 2)"] == pl.Int32
+        assert result["cs_qcut(x, 2)"].to_list() == [1, 2, 1, 2, 2, 1]
 
 
 class TestCSMidby:
