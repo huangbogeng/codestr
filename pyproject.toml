@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codestr"
-version = "0.3.1"
+version = "0.3.2"
 description = "DSL → Polars Expr compile engine for quantitative factor mining"
 readme = "README.md"
 license = {text = "MIT"}
